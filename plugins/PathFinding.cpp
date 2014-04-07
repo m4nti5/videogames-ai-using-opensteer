@@ -767,11 +767,13 @@ namespace{
 	class Connection{
 		public:
 			int toNode;
+			int fromNode;
 			float cost;
 			static const Connection None;
 		
-			Connection(int b,float cost){
-				toNode = b;
+			Connection(int from, int to,float cost){
+				fromNode = from;
+				toNode = to;
 				this->cost = cost;
 			}
 		
@@ -787,9 +789,11 @@ namespace{
 				this->toNode = c.toNode,this->cost=c.cost;
 				return *this;
 			}
+			
+			bool operator== (const Connection& n) const {return this->toNode == n.toNode && this->fromNode == n.fromNode && this->cost == n.cost;}
 	};
 	
-	const Connection Connection::None (-1,0.0f);
+	const Connection Connection::None (-1,-1,0.0f);
 	
 	class Node{
 		public:
@@ -810,7 +814,7 @@ namespace{
 			}
 			
 			void addConnection(int b, float cost){
-				Connection c (b, cost);
+				Connection c (this->id, b, cost);
 				adyacents.push_back(c);
 			}
 			
@@ -861,7 +865,7 @@ namespace{
 			void getConnections(const Node &node, std::vector<Connection>& connections){
 				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end(); ++it){
 					if(*it == node){
-						connections = node.adyacents;
+						copy((*it).adyacents.begin(), (*it).adyacents.end(), connections.begin());
 						break;
 					}
 				}
@@ -921,47 +925,57 @@ namespace{
 	void endGraph(){
 		g.clear();
 	}
-	/*
+
 	class NodeRecord{
 		public:
 			Node node;
 			Connection connection;
 			float costSoFar;
 			float estimatedTotalCost;
-			NodeRecord prev;
 			static const NodeRecord None;
 			
-			NodeRecord(const Node &n, const Connection &c, float cost, float estimated): node(n),connection(c),costSoFar(cost),estimatedTotalCost(estimated), prev(NodeRecord::None){}
+			NodeRecord(void): node(),connection(Connection::None), costSoFar(0.0f), estimatedTotalCost(0.0f){}
+			
+			NodeRecord(const Node &n, const Connection &c, float cost, float estimated): node(n),connection(c),costSoFar(cost),estimatedTotalCost(estimated){}
+			
+			NodeRecord operator= (const NodeRecord& n) {
+				this->node = n.node, this->connection = n.connection,this->costSoFar = n.costSoFar,
+				this->estimatedTotalCost = n.estimatedTotalCost;
+				return *this;
+			}
+    
+			bool operator== (const NodeRecord& n) const {
+				return this->node == n.node && this->connection == n.connection && Compare::nearlyEqual(this->costSoFar,n.costSoFar,FLT_EPSILON) && 	 Compare::nearlyEqual(this->estimatedTotalCost,n.estimatedTotalCost,FLT_EPSILON);
+			}
+			
+			bool operator!= (const NodeRecord& n) const {
+				return !(*this == n);
+			}
 	};
 	
 	const NodeRecord NodeRecord::None (Node::None,Connection::None,0.0f,0.0f);
 	
-	inline NodeRecord operator= (const NodeRecord& n) {
-		this->node = n.node, this->connection = n.connection,this->costSoFar = n.costSoFar,
-		this->estimatedTotalCost = n.estimatedTotalCost;
-		return *this;
-    }
-    
-	inline bool operator== (const NodeRecord& n) const {
-		return this->node == n.node && this->connection == n.connection && Compare::nearlyEqual(this->costSoFar,n.costSoFar,FLT_Epsilon) && 	 Compare::nearlyEqual(this->estimatedTotalCost,n.estimatedTotalCost,FLT_Epsilon);
-	}
-	
 	class Heuristic{
 		public:
 			static float estimate(Node &goal,Node &end){
-				return (end-goal).length()
+				return (end.position - goal.position).length();
 			}
 	};
 	
 	class PathFinding{
 		public:
 			static NodeRecord findSmallest(std::vector<NodeRecord>& list){
-			
+				NodeRecord smallest = *list.begin();
+				for(std::vector<NodeRecord>::iterator it = list.begin() + 1; it != list.end(); ++it){
+					if((*it).estimatedTotalCost < smallest.estimatedTotalCost)
+						smallest = *it;
+				}
+				return smallest;
 			}
 			
 			static NodeRecord contains(const Node &node, std::vector<NodeRecord> list){
 				for(std::vector<NodeRecord>::iterator it = list.begin(); it != list.end(); ++it){
-					if(*it.node == node)
+					if((*it).node == node)
 						return *it;
 				}
 				return NodeRecord::None;
@@ -976,15 +990,22 @@ namespace{
 				}
 			}
 			
-			static bool pathFindAStar(Graph &graph, Node &start, Node &end, Node &goal, Path path){
+			static NodeRecord searchForNode(Node& node, std::vector<NodeRecord>& open, std::vector<NodeRecord>& closed){
+				NodeRecord res = contains(node, open);
+				if(res == NodeRecord::None)
+					res = contains(node, closed);
+				return res;
+			}
+			
+			static bool pathFindAStar(Graph& graph, Node& start, Node& end, Node& goal, Path path){
 				NodeRecord startRecord;
-				starRecord.start = start;
+				startRecord.node = start;
 				startRecord.connection = Connection::None;
 				startRecord.costSoFar = 0.0f;
 				startRecord.estimatedTotalCost = Heuristic::estimate(start,goal);
 				
 				std::vector<NodeRecord> open;
-				open.push_back(NodeRecord);
+				open.push_back(startRecord);
 				std::vector<NodeRecord> closed;
 				
 				NodeRecord current = NodeRecord::None;
@@ -994,53 +1015,55 @@ namespace{
 					if(current.node == goal)
 						break;
 					std::vector<Connection> connections;
-					graph.getConnections(current.node, connections)
+					graph.getConnections(current.node, connections);
 					float endNodeHeuristic;
+					float endNodeCost;
 					for(std::vector<Connection>::iterator it = connections.begin(); it != connections.end(); ++it){
 						Connection connection = *it;
-						Node endNode = *((Node *)connection.getToNode());
-						float endNodeCost = current.costSoFar + connection.getCost();
+						Node endNode = graph.nodes[(*it).toNode];
+						endNodeCost = current.costSoFar + connection.getCost();
 						NodeRecord endNodeRecord = contains(endNode,closed);
 						if(endNodeRecord != NodeRecord::None){
 							if(endNodeRecord.costSoFar <= endNodeCost)
 								continue;
 							remove(endNodeRecord, closed);
-							endNodeHeuristic = endNodeRecord.cost - endNodeRecord.costSoFar;
+							endNodeHeuristic = endNodeRecord.connection.cost - endNodeRecord.costSoFar;
 							
 						}else{
 							endNodeRecord = contains(endNode,open);
 							if(endNodeRecord != NodeRecord::None){
 								if(endNodeRecord.costSoFar <= endNodeCost)
 									continue;
-								endNodeHeuristic = endNodeRecord.cost - endNodeRecord.costSoFar;
+								endNodeHeuristic = endNodeRecord.connection.cost - endNodeRecord.costSoFar;
 							}else{
 								endNodeRecord.node = endNode;
 								endNodeHeuristic = Heuristic::estimate(endNode,goal);
 							}
 						}
-						endNodeRecord.cost = endNodeCost;
+						endNodeRecord.costSoFar = endNodeCost;
 						endNodeRecord.connection = connection;
 						endNodeRecord.estimatedTotalCost = endNodeCost + endNodeHeuristic;
-						endNodeRecord.prev = current;
 						NodeRecord check = contains(endNode,open);
-						if(check != Node::None){
+						if(!(check.node == Node::None)){
 							open.push_back(endNodeRecord);
 						}
 					}
 					remove(current, open);
-					close.push_back(current);
+					closed.push_back(current);
 				}
-				if(current.node != goal)
+				
+				if(!(current.node == goal))
 					return false;
-				while(current.node != start){
+				while(!(current.node == start)){
 					path.addPoint(current.node.position);
-					current = current.prev;
+					Node prev = graph.nodes[current.connection.fromNode];
+					current = searchForNode(prev, open, closed);
 				}
 				path.reverse();
 				return true;
 			}
 	};
-*/
+
     // ----------------------------------------------------------------------------
     // This PlugIn uses tree vehicle types: CtfAgent, CtfPlayer and CtfProyectile.  They have a
     // common base class: CtfBase which is a specialization of SimpleVehicle.
