@@ -7,30 +7,16 @@
 #include <sstream>
 #include <cstdlib>
 #include <vector>
+#include <iterator>
 #include <limits.h>
 #include <limits>
 #include <float.h>
+#include <algorithm>
 #include "OpenSteer/Annotation.h"
 #include "OpenSteer/SimpleVehicle.h"
 #include "OpenSteer/OpenSteerDemo.h"
 #include "OpenSteer/Color.h"
 
-#include <stdio.h>
-#include <cmath> 
-#include <iomanip>
-#include <string>
-#include <GL/gl.h>
-#include <GL/glu.h>
-#include <sstream>
-#include <cstdlib>
-#include <vector>
-#include <limits.h>
-#include <limits>
-#include <float.h>
-#include "OpenSteer/Annotation.h"
-#include "OpenSteer/SimpleVehicle.h"
-#include "OpenSteer/OpenSteerDemo.h"
-#include "OpenSteer/Color.h"
 
 namespace{
     using namespace OpenSteer;
@@ -533,7 +519,7 @@ namespace{
 				a = points[segment];
 				b = points[segment + 1];
 				resultPoint = point + (b - a).normalize() * pathOffset;
-				std::cout << "resultPoint: " << resultPoint << ", point: " << point << ", direction: " << (b-a).normalize() << ", pathOffset: " << pathOffset << "(" << a << ", " << b << ")" << std::endl;
+				//std::cout << "resultPoint: " << resultPoint << ", point: " << point << ", direction: " << (b-a).normalize() << ", pathOffset: " << pathOffset << "(" << a << ", " << b << ")" << std::endl;
 				if(!isInSegment(a, b, resultPoint)){
 					if(pathOffset > 0.0f){
 						a = b;
@@ -778,57 +764,164 @@ namespace{
 		return o << "position: " << k.position << std::endl << "orientation: " << k.orientation << std::endl << "velocity: " << k.velocity << std::endl << "rotation: " << k.rotation << std::endl;
 	}
 	
+	class Connection{
+		public:
+			int toNode;
+			float cost;
+			static const Connection None;
+		
+			Connection(int b,float cost){
+				toNode = b;
+				this->cost = cost;
+			}
+		
+			int getToNode(){
+				return toNode;
+			}
+		
+			float getCost(){
+				return cost;
+			}
+
+			Connection operator= (const Connection& c) {
+				this->toNode = c.toNode,this->cost=c.cost;
+				return *this;
+			}
+	};
+	
+	const Connection Connection::None (-1,0.0f);
+	
 	class Node{
 		public:
+			int id;
+			std::vector<Connection> adyacents;
 			Vec3 position;
 			static const Node None;
 			
 			Node(void): position(Vec3::zero){}
+			
+			~Node(){
+				adyacents.clear();
+			}
+			
+			Node(int id, const Vec3& position){
+				this->position = position;
+				this->id = id;
+			}
+			
+			void addConnection(int b, float cost){
+				Connection c (b, cost);
+				adyacents.push_back(c);
+			}
+			
+			inline Node operator= (const Node& n) {
+				this->position = n.position;
+				this->id = n.id;
+				this->adyacents = n.adyacents;
+				return *this;
+			}
+		
+			inline bool operator== (const Node& n) const {return this->id == n.id;}
+	
 	};
 	
-	const Node Node::None ();
+	const Node Node::None (0,Vec3::zero);
 	
-	inline Node operator= (const Node& n) {
-		this->position = n.position;
-		return *this;
-    }
-    
-	inline bool operator== (const Node& n) const {return true;}
+	inline std::ostream& operator<< (std::ostream& o, const Connection& c){
+		return o << c.toNode << "(" << c.cost << ")";
+	}
 	
+	inline std::ostream& operator<< (std::ostream& o, const Node& n){
+		o << n.id << "(" << n.adyacents.size() << ")" << ": ";
+		copy(n.adyacents.begin(), n.adyacents.end(), std::ostream_iterator<Connection>(o, " "));
+		return o << std::endl;
+	}
 	
-	class Connection{
-		public:
-			std::pair<Node,Node> con;
-			float cost;
-			static const Connection None;
-			
-			Connection(const Node& a,const Node &b,float cost){
-				con.first = a;
-				con.second = b;
-				this->cost = cost;
-			}
-			
-			Node getToNode(){
-				return c.second;
-			}
-			
-			float getCost(){
-				return cost;
-			}
-	};
-	
-	const Connection Connection::None (Node::None,Node::None,0.0f);
-	Connection operator= (const Connection& c) {
-		this->con = c.con,this->cost=c.cost;
-	    return *this;
-    }
-    
 	class Graph{
 		public:
-			void getConnections(const Node &node, std::vector<Connection> connections){
+			std::vector<Node> nodes;
+			int lastid;
+			
+			Graph(void){lastid = 0;}
+			
+			int addNode(const Vec3& position){
+				int node_id = lastid++;
+				Node n (node_id, position);
+				nodes.push_back(n);
+				return node_id;
+			}
+			
+			void addConnection(int a, int b, float cost){
+				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end();++it){
+					if((*it).id == a)
+						(*it).addConnection(b, cost);
+				}
+			}
+			
+			void getConnections(const Node &node, std::vector<Connection>& connections){
+				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end(); ++it){
+					if(*it == node){
+						connections = node.adyacents;
+						break;
+					}
+				}
+			}
+			
+			void clear(){
+				nodes.clear();
+			}
+			
+			void draw(){
+				for(std::vector<Node>::iterator n = nodes.begin();n != nodes.end();++n){
+					Vec3 p1 = (*n).position;
+					drawCircleOrDisk (0.25, Vec3 (0.0f,1.0f,0.0f), p1, gOrange, 30, true, true);
+
+					for(std::vector<Connection>::iterator c = (*n).adyacents.begin(); c!= (*n).adyacents.end();++c){
+						Vec3 p2 = nodes[(*c).toNode].position;
+						OpenSteer::drawLine(p1, p2, gOrange);
+						
+						Vec3 tpos = p2 - p1;
+						float l = tpos.length();
+						const Vec3 textOrigin = p1 + tpos.normalize() * l/2 + Vec3 (0, 0.25, 0);
+						std::ostringstream annote;
+						annote << (*c).cost << std::endl;
+						draw2dTextAt3dLocation (annote, textOrigin, gOrange, drawGetWindowWidth(), drawGetWindowHeight());
+					}
+				}
 			}
 	};
 	
+	
+	inline std::ostream& operator<< (std::ostream& o, const Graph& s){
+		copy(s.nodes.begin(), s.nodes.end(), std::ostream_iterator<Node>(o, ""));
+		return o;
+	}
+	
+	Graph g;
+	
+	void initGraph(){
+		Vec3 p1 (0.0f, 0.0f, 0.0f);
+		Vec3 p2 (5.0f, 0.0f, 0.0f);
+		Vec3 p3 (10.0f, 0.0f, 5.0f);
+		Vec3 p4 (15.0f, 0.0f, 10.0f);
+		int n1 = g.addNode(p1);
+		int n2 = g.addNode(p2);
+		int n3 = g.addNode(p3);
+		int n4 = g.addNode(p4);
+		
+		std::cout << "NODES ADDED: " << std::endl << g << std::endl;
+		g.addConnection(n1, n2, 1.1f);
+		g.addConnection(n2, n3, 1.2f);
+		g.addConnection(n3, n4, 1.3f);
+		g.addConnection(n3, n1, 1.5f);
+		std::cout << g << std::endl;
+	}
+	
+	
+	void endGraph(){
+		g.clear();
+	}
+	/*
 	class NodeRecord{
 		public:
 			Node node;
@@ -842,6 +935,7 @@ namespace{
 	};
 	
 	const NodeRecord NodeRecord::None (Node::None,Connection::None,0.0f,0.0f);
+	
 	inline NodeRecord operator= (const NodeRecord& n) {
 		this->node = n.node, this->connection = n.connection,this->costSoFar = n.costSoFar,
 		this->estimatedTotalCost = n.estimatedTotalCost;
@@ -904,7 +998,7 @@ namespace{
 					float endNodeHeuristic;
 					for(std::vector<Connection>::iterator it = connections.begin(); it != connections.end(); ++it){
 						Connection connection = *it;
-						Node endNode = connection.getToNode();
+						Node endNode = *((Node *)connection.getToNode());
 						float endNodeCost = current.costSoFar + connection.getCost();
 						NodeRecord endNodeRecord = contains(endNode,closed);
 						if(endNodeRecord != NodeRecord::None){
@@ -946,7 +1040,7 @@ namespace{
 				return true;
 			}
 	};
-	
+*/
     // ----------------------------------------------------------------------------
     // This PlugIn uses tree vehicle types: CtfAgent, CtfPlayer and CtfProyectile.  They have a
     // common base class: CtfBase which is a specialization of SimpleVehicle.
@@ -1276,7 +1370,7 @@ namespace{
 		    	steerFunctions.push_back(SteeringLookWhereYoureGoing::getSteering);
 		    	
 		    	initPath();
-		    	
+		    	initGraph();
 		    	
 		    	initBlendedBehaviours();
 		    	initPriorityGroups();
@@ -1317,6 +1411,8 @@ namespace{
 				// Draw path
 				path.draw();
 				
+				// Draw graph
+				g.draw();
 				
 				if(path.isNearEnd(ctfAgent->k.position) || path.isNearBeginning(ctfAgent->k.position))
 					SteeringFollowPath::pathOffset *= -1.0f;
@@ -1377,6 +1473,7 @@ namespace{
 				endBlendedBehaviours();
 				endPriorityGroups();
 				endPath();
+				endGraph();
 
 		        // clear the group of all vehicles
 		        all.clear();
