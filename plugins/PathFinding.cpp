@@ -972,7 +972,7 @@ namespace{
 		g.addConnection(n0, n1, (p0 - p1).length() + 5.0f);
 		g.addConnection(n1, n2, (p1 - p2).length() + 1.0f);
 		g.addConnection(n0, n3, (p0 - p3).length() + 1.0f);
-		g.addConnection(n0, n4, (p0 - p4).length() + 14.0f);
+		g.addConnection(n0, n4, (p0 - p4).length() + 1.0f);
 		g.addConnection(n1, n5, (p1 - p5).length() + 1.0f);
 		g.addConnection(n3, n4, (p3 - p4).length() + 1.0f);
 		g.addConnection(n4, n6, (p4 - p6).length() + 1.0f);
@@ -1009,7 +1009,15 @@ namespace{
 			bool operator!= (const NodeRecord& n) const {
 				return !(*this == n);
 			}
+			
 	};
+	
+	struct compareNodeRecord{
+		static bool compare(const NodeRecord& n1, const NodeRecord& n2){
+			return n1.estimatedTotalCost > n2.estimatedTotalCost;
+		}
+	};
+		
 	
 	const NodeRecord NodeRecord::None (Node::None,Connection::None,0.0f,0.0f);
 	
@@ -1024,9 +1032,53 @@ namespace{
 			}
 	};
 	
-	class PathFinding{
+	class PathFindingList{
 		public:
-			static NodeRecord findSmallest(std::vector<NodeRecord>& list){
+			PathFindingList(){}
+			
+			bool contains(const Node &node, NodeRecord& result){
+				for(std::vector<NodeRecord>::iterator it = list.begin(); it != list.end(); ++it){
+					if((*it).node == node){
+						result = *it;
+						return true;
+					}
+				}
+				return false;
+			}
+			
+			bool remove(const NodeRecord &node){
+				for(std::vector<NodeRecord>::iterator it = list.begin(); it != list.end(); ++it){
+					if(*it == node){
+						list.erase(it);
+						break;
+					}
+				}
+			}
+			
+			static NodeRecord searchForNode(Node& node, PathFindingList& list1, PathFindingList& list2){
+				NodeRecord res = NodeRecord::None;
+				if(!list1.contains(node, res))
+					list2.contains(node, res);
+				return res;
+			}
+			
+			void push(const NodeRecord& n){
+				list.push_back(n);
+			}
+			
+			int size(){
+				return list.size();
+			}
+			
+			bool empty(){
+				return list.size() == 0;
+			}
+			
+			bool not_empty(){
+				return !empty();
+			}
+			
+			NodeRecord findSmallest(){
 				std::vector<NodeRecord>::iterator it = list.begin();
 				NodeRecord smallest = *it;
 				for(it +=  1; it != list.end(); ++it){
@@ -1036,31 +1088,13 @@ namespace{
 				return smallest;
 			}
 			
-			static bool contains(const Node &node, std::vector<NodeRecord>& list, NodeRecord& result){
-				for(std::vector<NodeRecord>::iterator it = list.begin(); it != list.end(); ++it){
-					if((*it).node == node){
-						result = *it;
-						return true;
-					}
-				}
-				return false;
-			}
-		
-			static void remove(const NodeRecord& n, std::vector<NodeRecord>& list){
-				for(std::vector<NodeRecord>::iterator it = list.begin(); it != list.end(); ++it){
-					if(*it == n){
-						list.erase(it);
-						break;
-					}
-				}
-			}
-			
-			static NodeRecord searchForNode(Node& node, std::vector<NodeRecord>& open, std::vector<NodeRecord>& closed){
-				NodeRecord res = NodeRecord::None;
-				if(!contains(node, open, res))
-					contains(node, closed, res);
-				return res;
-			}
+		private:
+			std::vector<NodeRecord> list;
+	
+	};
+	
+	class PathFinding{
+		public:
 			
 			static bool pathFindAStar(Graph& graph, Node& start, Node& goal, Path& path){
 				NodeRecord startRecord;
@@ -1069,13 +1103,13 @@ namespace{
 				startRecord.costSoFar = 0.0f;
 				startRecord.estimatedTotalCost = Heuristic::estimate(start,goal);
 				
-				std::vector<NodeRecord> open;
-				open.push_back(startRecord);
-				std::vector<NodeRecord> closed;
+				PathFindingList open;
+				open.push(startRecord);
+				PathFindingList closed;
 				
 				NodeRecord current = NodeRecord::None;
-				while(open.size() > 0){
-					current = findSmallest(open);
+				while(open.not_empty()){
+					current = open.findSmallest();
 					if(current.node == goal)
 						break;
 					std::vector<Connection> connections;
@@ -1087,15 +1121,15 @@ namespace{
 						Node endNode = graph.nodes[(*it).toNode];
 						endNodeCost = current.costSoFar + connection.getCost();
 						NodeRecord endNodeRecord = NodeRecord::None;
-						if(contains(endNode, closed, endNodeRecord)){
+						if(closed.contains(endNode, endNodeRecord)){
 							if(endNodeRecord.costSoFar <= endNodeCost)
 								continue;
-							remove(endNodeRecord, closed);
+							closed.remove(endNodeRecord);
 							endNodeHeuristic = endNodeRecord.estimatedTotalCost - endNodeRecord.costSoFar;
-						}else if(contains(endNode, open, endNodeRecord)){
+						}else if(open.contains(endNode, endNodeRecord)){
 							if(endNodeRecord.costSoFar <= endNodeCost)
 								continue;
-							remove(endNodeRecord, open);
+							open.remove(endNodeRecord);
 							endNodeHeuristic = endNodeRecord.estimatedTotalCost - endNodeRecord.costSoFar;
 						}else{
 							endNodeRecord.node = endNode;
@@ -1105,12 +1139,12 @@ namespace{
 						endNodeRecord.connection = connection;
 						endNodeRecord.estimatedTotalCost = endNodeCost + endNodeHeuristic;
 						NodeRecord check;
-						if(!contains(endNode, open, check)){
-							open.push_back(endNodeRecord);
+						if(!open.contains(endNode, check)){
+							open.push(endNodeRecord);
 						}
 					}
-					remove(current, open);
-					closed.push_back(current);
+					open.remove(current);
+					closed.push(current);
 				}
 				
 				if(current.node != goal)
@@ -1118,7 +1152,7 @@ namespace{
 				while(current.node != start){
 					path.addPoint(current.node.position);
 					Node prev = graph.nodes[current.connection.fromNode];
-					current = searchForNode(prev, open, closed);
+					current = PathFindingList::searchForNode(prev, open, closed);
 				}
 				path.addPoint(start.position);
 				path.reverse();
