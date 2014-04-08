@@ -233,13 +233,7 @@ namespace{
 				a = fmod(a + M_PI, M_2PI) - M_PI;
 				return a;
 			}
-			/*
-			inline static float abs(float a){
-				if(a < 0)
-					return -a;
-				return a;
-			}
-			*/
+			
 		public:
 			static void getSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering){
 				float rotation = target.orientation - character.orientation;

@@ -786,7 +786,7 @@ namespace{
 			}
 
 			Connection operator= (const Connection& c) {
-				this->toNode = c.toNode,this->cost=c.cost;
+				this->toNode = c.toNode,this->fromNode = c.fromNode,this->cost=c.cost;
 				return *this;
 			}
 			
@@ -824,8 +824,10 @@ namespace{
 				this->adyacents = n.adyacents;
 				return *this;
 			}
-		
+					
 			inline bool operator== (const Node& n) const {return this->id == n.id;}
+			
+			inline bool operator!= (const Node& n) const {return (!(*this == n));}
 	
 	};
 	
@@ -865,7 +867,9 @@ namespace{
 			void getConnections(const Node &node, std::vector<Connection>& connections){
 				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end(); ++it){
 					if(*it == node){
-						copy((*it).adyacents.begin(), (*it).adyacents.end(), connections.begin());
+						for(std::vector<Connection>::iterator c_it = (*it).adyacents.begin(); c_it != (*it).adyacents.end(); ++c_it){
+							connections.push_back(*c_it);
+						}
 						break;
 					}
 				}
@@ -879,6 +883,9 @@ namespace{
 				for(std::vector<Node>::iterator n = nodes.begin();n != nodes.end();++n){
 					Vec3 p1 = (*n).position;
 					drawCircleOrDisk (0.25, Vec3 (0.0f,1.0f,0.0f), p1, gOrange, 30, true, true);
+					std::ostringstream node_id;
+					node_id << (*n).id << std::endl;
+					draw2dTextAt3dLocation (node_id, p1, gWhite, drawGetWindowWidth(), drawGetWindowHeight());
 
 					for(std::vector<Connection>::iterator c = (*n).adyacents.begin(); c!= (*n).adyacents.end();++c){
 						Vec3 p2 = nodes[(*c).toNode].position;
@@ -895,7 +902,6 @@ namespace{
 			}
 	};
 	
-	
 	inline std::ostream& operator<< (std::ostream& o, const Graph& s){
 		copy(s.nodes.begin(), s.nodes.end(), std::ostream_iterator<Node>(o, ""));
 		return o;
@@ -904,21 +910,73 @@ namespace{
 	Graph g;
 	
 	void initGraph(){
+		/*
 		Vec3 p1 (0.0f, 0.0f, 0.0f);
 		Vec3 p2 (5.0f, 0.0f, 0.0f);
 		Vec3 p3 (10.0f, 0.0f, 5.0f);
-		Vec3 p4 (15.0f, 0.0f, 10.0f);
+		Vec3 p4 (13.0f, 0.0f, 10.0f);
+		int n0 = g.addNode(p1);
+		int n1 = g.addNode(p2);
+		int n2 = g.addNode(p3);
+		int n3 = g.addNode(p4);
+		
+		std::cout << "NODES ADDED: " << std::endl << g << std::endl;
+		g.addConnection(n0, n1, 1.1f);
+		g.addConnection(n0, n2, 1.0f);
+		g.addConnection(n1, n2, 1.2f);
+		g.addConnection(n2, n3, 1.3f);
+		g.addConnection(n1, n3, 1.5f);
+		std::cout << g << std::endl;
+		*/
+		/*
+		Vec3 p0 (0.0f, 0.0f, 0.0f);
+		Vec3 p1 (5.0f, 0.0f, 0.0f);
+		Vec3 p2 (10.0f, 0.0f, 0.0f);
+		Vec3 p3 (2.0f, 0.0f, 5.0f);
+		Vec3 p4 (6.0f, 0.0f, 5.0f);
+		Vec3 p5 (5.0f, 0.0f, 10.0f);
+		Vec3 p6 (10.0f, 0.0f, 10.0f);
+		
+		int n0 = g.addNode(p0);
 		int n1 = g.addNode(p1);
 		int n2 = g.addNode(p2);
 		int n3 = g.addNode(p3);
 		int n4 = g.addNode(p4);
+		int n5 = g.addNode(p5);
+		int n6 = g.addNode(p6);
 		
-		std::cout << "NODES ADDED: " << std::endl << g << std::endl;
-		g.addConnection(n1, n2, 1.1f);
-		g.addConnection(n2, n3, 1.2f);
-		g.addConnection(n3, n4, 1.3f);
-		g.addConnection(n3, n1, 1.5f);
-		std::cout << g << std::endl;
+		g.addConnection(n0, n1, 1.3f);
+		g.addConnection(n1, n2, 1.5f);
+		g.addConnection(n0, n3, 1.1f);
+		g.addConnection(n1, n4, 1.7f);
+		g.addConnection(n3, n4, 1.5f);
+		g.addConnection(n3, n5, 1.6f);
+		g.addConnection(n4, n6, 1.4f);
+		*/
+		Vec3 p0 (0.0f, 0.0f, 0.0f);
+		Vec3 p1 (5.0f, 0.0f, -2.0f);
+		Vec3 p2 (10.0f, 0.0f, -5.0f);
+		Vec3 p3 (2.0f, 0.0f, 10.0f);
+		Vec3 p4 (5.0f, 0.0f, 5.0f);
+		Vec3 p5 (10.0f, 0.0f, 0.0f);
+		Vec3 p6 (10.0f, 0.0f, 10.0f);
+		
+		int n0 = g.addNode(p0);
+		int n1 = g.addNode(p1);
+		int n2 = g.addNode(p2);
+		int n3 = g.addNode(p3);
+		int n4 = g.addNode(p4);
+		int n5 = g.addNode(p5);
+		int n6 = g.addNode(p6);
+		
+		g.addConnection(n0, n1, (p0 - p1).length() + 5.0f);
+		g.addConnection(n1, n2, (p1 - p2).length() + 1.0f);
+		g.addConnection(n0, n3, (p0 - p3).length() + 1.0f);
+		g.addConnection(n0, n4, (p0 - p4).length() + 14.0f);
+		g.addConnection(n1, n5, (p1 - p5).length() + 1.0f);
+		g.addConnection(n3, n4, (p3 - p4).length() + 1.0f);
+		g.addConnection(n4, n6, (p4 - p6).length() + 1.0f);
+		g.addConnection(n5, n6, (p5 - p6).length() + 1.0f);
 	}
 	
 	
@@ -955,6 +1013,10 @@ namespace{
 	
 	const NodeRecord NodeRecord::None (Node::None,Connection::None,0.0f,0.0f);
 	
+	inline std::ostream& operator<< (std::ostream& o, const NodeRecord& s){
+		return o << "Nodo: " << s.node << ", Coneccion: " << s.connection << ", soFar: " << s.costSoFar << ", estimated: " << s.estimatedTotalCost;
+	}
+	
 	class Heuristic{
 		public:
 			static float estimate(Node &goal,Node &end){
@@ -965,23 +1027,26 @@ namespace{
 	class PathFinding{
 		public:
 			static NodeRecord findSmallest(std::vector<NodeRecord>& list){
-				NodeRecord smallest = *list.begin();
-				for(std::vector<NodeRecord>::iterator it = list.begin() + 1; it != list.end(); ++it){
+				std::vector<NodeRecord>::iterator it = list.begin();
+				NodeRecord smallest = *it;
+				for(it +=  1; it != list.end(); ++it){
 					if((*it).estimatedTotalCost < smallest.estimatedTotalCost)
 						smallest = *it;
 				}
 				return smallest;
 			}
 			
-			static NodeRecord contains(const Node &node, std::vector<NodeRecord> list){
+			static bool contains(const Node &node, std::vector<NodeRecord>& list, NodeRecord& result){
 				for(std::vector<NodeRecord>::iterator it = list.begin(); it != list.end(); ++it){
-					if((*it).node == node)
-						return *it;
+					if((*it).node == node){
+						result = *it;
+						return true;
+					}
 				}
-				return NodeRecord::None;
+				return false;
 			}
 		
-			static void remove(const NodeRecord n, std::vector<NodeRecord> list){
+			static void remove(const NodeRecord& n, std::vector<NodeRecord>& list){
 				for(std::vector<NodeRecord>::iterator it = list.begin(); it != list.end(); ++it){
 					if(*it == n){
 						list.erase(it);
@@ -991,13 +1056,13 @@ namespace{
 			}
 			
 			static NodeRecord searchForNode(Node& node, std::vector<NodeRecord>& open, std::vector<NodeRecord>& closed){
-				NodeRecord res = contains(node, open);
-				if(res == NodeRecord::None)
-					res = contains(node, closed);
+				NodeRecord res = NodeRecord::None;
+				if(!contains(node, open, res))
+					contains(node, closed, res);
 				return res;
 			}
 			
-			static bool pathFindAStar(Graph& graph, Node& start, Node& end, Node& goal, Path path){
+			static bool pathFindAStar(Graph& graph, Node& start, Node& goal, Path& path){
 				NodeRecord startRecord;
 				startRecord.node = start;
 				startRecord.connection = Connection::None;
@@ -1009,7 +1074,6 @@ namespace{
 				std::vector<NodeRecord> closed;
 				
 				NodeRecord current = NodeRecord::None;
-				
 				while(open.size() > 0){
 					current = findSmallest(open);
 					if(current.node == goal)
@@ -1022,29 +1086,26 @@ namespace{
 						Connection connection = *it;
 						Node endNode = graph.nodes[(*it).toNode];
 						endNodeCost = current.costSoFar + connection.getCost();
-						NodeRecord endNodeRecord = contains(endNode,closed);
-						if(endNodeRecord != NodeRecord::None){
+						NodeRecord endNodeRecord = NodeRecord::None;
+						if(contains(endNode, closed, endNodeRecord)){
 							if(endNodeRecord.costSoFar <= endNodeCost)
 								continue;
 							remove(endNodeRecord, closed);
-							endNodeHeuristic = endNodeRecord.connection.cost - endNodeRecord.costSoFar;
-							
+							endNodeHeuristic = endNodeRecord.estimatedTotalCost - endNodeRecord.costSoFar;
+						}else if(contains(endNode, open, endNodeRecord)){
+							if(endNodeRecord.costSoFar <= endNodeCost)
+								continue;
+							remove(endNodeRecord, open);
+							endNodeHeuristic = endNodeRecord.estimatedTotalCost - endNodeRecord.costSoFar;
 						}else{
-							endNodeRecord = contains(endNode,open);
-							if(endNodeRecord != NodeRecord::None){
-								if(endNodeRecord.costSoFar <= endNodeCost)
-									continue;
-								endNodeHeuristic = endNodeRecord.connection.cost - endNodeRecord.costSoFar;
-							}else{
-								endNodeRecord.node = endNode;
-								endNodeHeuristic = Heuristic::estimate(endNode,goal);
-							}
+							endNodeRecord.node = endNode;
+							endNodeHeuristic = Heuristic::estimate(endNode, goal);
 						}
 						endNodeRecord.costSoFar = endNodeCost;
 						endNodeRecord.connection = connection;
 						endNodeRecord.estimatedTotalCost = endNodeCost + endNodeHeuristic;
-						NodeRecord check = contains(endNode,open);
-						if(!(check.node == Node::None)){
+						NodeRecord check;
+						if(!contains(endNode, open, check)){
 							open.push_back(endNodeRecord);
 						}
 					}
@@ -1052,13 +1113,14 @@ namespace{
 					closed.push_back(current);
 				}
 				
-				if(!(current.node == goal))
+				if(current.node != goal)
 					return false;
-				while(!(current.node == start)){
+				while(current.node != start){
 					path.addPoint(current.node.position);
 					Node prev = graph.nodes[current.connection.fromNode];
 					current = searchForNode(prev, open, closed);
 				}
+				path.addPoint(start.position);
 				path.reverse();
 				return true;
 			}
@@ -1363,7 +1425,9 @@ namespace{
     // ----------------------------------------------------------------------------
     // PlugIn for OpenSteerDemo
 
-
+	bool drawGraph = true;
+	bool runAStar = true;
+	
     class CtfPlugIn : public PlugIn
     {
 		public:
@@ -1432,10 +1496,17 @@ namespace{
 					(*it)->update (currentTime, elapsedTime);
 				
 				// Draw path
-				path.draw();
+				// path.draw();
 				
 				// Draw graph
-				g.draw();
+				if(drawGraph)
+					g.draw();
+				
+				// Find A* path
+				Path p;
+				if(runAStar)
+					PathFinding::pathFindAStar(g, g.nodes[0], g.nodes[g.nodes.size() - 1], p);
+				p.draw();
 				
 				if(path.isNearEnd(ctfAgent->k.position) || path.isNearBeginning(ctfAgent->k.position))
 					SteeringFollowPath::pathOffset *= -1.0f;
@@ -1542,6 +1613,12 @@ namespace{
 		    			break;
 		    		case 2:
 		    			steerFuncNum = (steerFuncNum + 1) % n;
+		    			break;
+		    		case 3:
+		    			drawGraph = !drawGraph;
+		    			break;
+		    		case 4:
+		    			runAStar = !runAStar;
 		    			break;
 		    	}
 		    }
