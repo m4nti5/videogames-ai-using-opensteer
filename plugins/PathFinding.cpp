@@ -921,11 +921,11 @@ namespace{
 		int n3 = g.addNode(p4);
 		
 		std::cout << "NODES ADDED: " << std::endl << g << std::endl;
-		g.addConnection(n0, n1, 1.1f);
-		g.addConnection(n0, n2, 1.0f);
-		g.addConnection(n1, n2, 1.2f);
-		g.addConnection(n2, n3, 1.3f);
-		g.addConnection(n1, n3, 1.5f);
+		g.addConnection(n0, n1, (p0 - p1).length());
+		g.addConnection(n0, n2, (p0 - p2).length());
+		g.addConnection(n1, n2, (p1 - p2).length());
+		g.addConnection(n2, n3, (p2 - p3).length());
+		g.addConnection(n1, n3, (p1 - p3).length());
 		std::cout << g << std::endl;
 		*/
 		/*
@@ -945,13 +945,13 @@ namespace{
 		int n5 = g.addNode(p5);
 		int n6 = g.addNode(p6);
 		
-		g.addConnection(n0, n1, 1.3f);
-		g.addConnection(n1, n2, 1.5f);
-		g.addConnection(n0, n3, 1.1f);
-		g.addConnection(n1, n4, 1.7f);
-		g.addConnection(n3, n4, 1.5f);
-		g.addConnection(n3, n5, 1.6f);
-		g.addConnection(n4, n6, 1.4f);
+		g.addConnection(n0, n1, (p0 - p1).length());
+		g.addConnection(n1, n2, (p1 - p2).length());
+		g.addConnection(n0, n3, (p0 - p3).length());
+		g.addConnection(n1, n4, (p1 - p4).length());
+		g.addConnection(n3, n4, (p3 - p4).length());
+		g.addConnection(n3, n5, (p3 - p5).length());
+		g.addConnection(n4, n6, (p4 - p6).length());
 		*/
 		Vec3 p0 (0.0f, 0.0f, 0.0f);
 		Vec3 p1 (5.0f, 0.0f, -2.0f);
@@ -969,14 +969,14 @@ namespace{
 		int n5 = g.addNode(p5);
 		int n6 = g.addNode(p6);
 		
-		g.addConnection(n0, n1, (p0 - p1).length() + 5.0f);
-		g.addConnection(n1, n2, (p1 - p2).length() + 1.0f);
-		g.addConnection(n0, n3, (p0 - p3).length() + 1.0f);
-		g.addConnection(n0, n4, (p0 - p4).length() + 1.0f);
-		g.addConnection(n1, n5, (p1 - p5).length() + 1.0f);
-		g.addConnection(n3, n4, (p3 - p4).length() + 1.0f);
-		g.addConnection(n4, n6, (p4 - p6).length() + 1.0f);
-		g.addConnection(n5, n6, (p5 - p6).length() + 1.0f);
+		g.addConnection(n0, n1, (p0 - p1).length());
+		g.addConnection(n1, n2, (p1 - p2).length());
+		g.addConnection(n0, n3, (p0 - p3).length());
+		g.addConnection(n0, n4, (p0 - p4).length());
+		g.addConnection(n1, n5, (p1 - p5).length());
+		g.addConnection(n3, n4, (p3 - p4).length());
+		g.addConnection(n4, n6, (p4 - p6).length());
+		g.addConnection(n5, n6, (p5 - p6).length() + 5.0f);
 	}
 	
 	
@@ -1088,6 +1088,16 @@ namespace{
 				return smallest;
 			}
 			
+			NodeRecord findSmallestDijkstra(){
+				std::vector<NodeRecord>::iterator it = list.begin();
+				NodeRecord smallest = *it;
+				for(it +=  1; it != list.end(); ++it){
+					if((*it).costSoFar < smallest.costSoFar)
+						smallest = *it;
+				}
+				return smallest;
+			}
+			
 		private:
 			std::vector<NodeRecord> list;
 	
@@ -1118,7 +1128,7 @@ namespace{
 					float endNodeCost;
 					for(std::vector<Connection>::iterator it = connections.begin(); it != connections.end(); ++it){
 						Connection connection = *it;
-						Node endNode = graph.nodes[(*it).toNode];
+						Node endNode = graph.nodes[connection.toNode];
 						endNodeCost = current.costSoFar + connection.getCost();
 						NodeRecord endNodeRecord = NodeRecord::None;
 						if(closed.contains(endNode, endNodeRecord)){
@@ -1149,6 +1159,61 @@ namespace{
 				
 				if(current.node != goal)
 					return false;
+				while(current.node != start){
+					path.addPoint(current.node.position);
+					Node prev = graph.nodes[current.connection.fromNode];
+					current = PathFindingList::searchForNode(prev, open, closed);
+				}
+				path.addPoint(start.position);
+				path.reverse();
+				return true;
+			}
+			
+			static bool pathFindDijkstra(Graph& graph, Node& start, Node& goal, Path& path){
+				NodeRecord startRecord;
+				startRecord.node = start;
+				startRecord.connection = Connection::None;
+				startRecord.costSoFar = 0;
+				
+				PathFindingList open;
+				open.push(startRecord);
+				PathFindingList closed;
+				
+				NodeRecord current;
+				
+				while(open.not_empty()){
+					current = open.findSmallestDijkstra();
+					if(current.node == goal)
+						break;
+					std::vector<Connection> connections;
+					graph.getConnections(current.node, connections);
+					for(std::vector<Connection>::iterator it = connections.begin(); it != connections.end(); ++it){
+						Connection connection = *it;
+						Node endNode = graph.nodes[connection.toNode];
+						float endNodeCost = current.costSoFar + connection.getCost();
+						NodeRecord endNodeRecord, check;
+						if(closed.contains(endNode, check)){
+							continue;
+						}else if(open.contains(endNode, endNodeRecord)){
+							if(endNodeRecord.costSoFar <= endNodeCost){
+								continue;
+							}else{
+								open.remove(endNodeRecord);
+							}
+						}else{
+							endNodeRecord.node = endNode;
+						}
+						endNodeRecord.costSoFar = endNodeCost;
+						endNodeRecord.connection = connection;
+						if(!open.contains(endNode, check))
+							open.push(endNodeRecord);
+					}
+					open.remove(current);
+					closed.push(current);
+				}
+				if(current.node != goal)
+					return false;
+				
 				while(current.node != start){
 					path.addPoint(current.node.position);
 					Node prev = graph.nodes[current.connection.fromNode];
@@ -1474,6 +1539,8 @@ namespace{
 
 		    void open (void)
 		    {
+		    	steerFunctions.push_back(SteeringArrive::getSteering);
+		    	/*
 		    	steerFunctions.push_back(SteeringFollowPath::getSteering);
 		    	steerFunctions.push_back(SteeringPriority::getSteering);
 		    	steerFunctions.push_back(SteeringCollisionAvoidance::getSteering);
@@ -1484,12 +1551,11 @@ namespace{
 		    	steerFunctions.push_back(SteeringWander::getSteering);
 		    	steerFunctions.push_back(SteeringSeek::getSteering);
 		    	steerFunctions.push_back(SteeringFlee::getSteering);
-		    	steerFunctions.push_back(SteeringArrive::getSteering);
 		    	steerFunctions.push_back(SteeringAlign::getSteering);
 		    	steerFunctions.push_back(SteeringVelocityMatch::getSteering);
 		    	steerFunctions.push_back(SteeringFace::getSteering);
 		    	steerFunctions.push_back(SteeringLookWhereYoureGoing::getSteering);
-		    	
+		    	*/
 		    	initPath();
 		    	initGraph();
 		    	
@@ -1539,7 +1605,8 @@ namespace{
 				// Find A* path
 				Path p;
 				if(runAStar)
-					PathFinding::pathFindAStar(g, g.nodes[0], g.nodes[g.nodes.size() - 1], p);
+					PathFinding::pathFindDijkstra(g, g.nodes[0], g.nodes[g.nodes.size() - 1], p);
+					//PathFinding::pathFindAStar(g, g.nodes[0], g.nodes[g.nodes.size() - 1], p);
 				p.draw();
 				
 				if(path.isNearEnd(ctfAgent->k.position) || path.isNearBeginning(ctfAgent->k.position))
