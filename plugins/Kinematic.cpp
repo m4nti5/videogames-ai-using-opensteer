@@ -139,7 +139,16 @@ namespace{
 			static void getSteering(Kinematic& target, Kinematic& character, SteeringOutput& steering){
 				steering.linear = target.position - character.position;
 				if(steering.linear.length() < radius){
-					steering.linear = Vec3::zero;
+					// select string describing current seeker state
+					std::string seekerStateString("KINEMATICARRIVE");
+				
+					// annote seeker with its state as text
+					const Vec3 textOrigin = character.position + Vec3 (0, 0.25, 0);
+					std::ostringstream annote;
+					annote << seekerStateString << std::endl;
+					draw2dTextAt3dLocation (annote, textOrigin, gWhite, drawGetWindowWidth(), drawGetWindowHeight());
+				
+					steering.linear = -character.velocity;
 					steering.angular = character.rotation;
 					return;
 				}
@@ -163,7 +172,7 @@ namespace{
 			}
 	};
 	
-	const float KinematicArrive::radius = 1.0f;
+	const float KinematicArrive::radius = 1.2f;
 	
 	const float KinematicArrive::timeToTarget = 3.0f;
 	
