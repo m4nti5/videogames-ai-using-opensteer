@@ -461,7 +461,7 @@ namespace{
     {
     public:
 
-        const char* name (void) {return "Kinematic Seek";}
+        const char* name (void) {return "Kinematic Behaviours";}
 
         float selectionOrderSortKey (void) {return 0.01f;}
 
