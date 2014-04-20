@@ -13,6 +13,9 @@
 namespace{
     using namespace OpenSteer;
     
+	Vec3 agentInitialPos (1,0,1);
+	Vec3 playerInitialPos (6,0,6);
+    
 	class SteeringOutput{
 		public:
 			Vec3 linear;
@@ -225,7 +228,7 @@ namespace{
 		return o << "position: " << k.position << std::endl << "orientation: " << k.orientation << std::endl << "velocity: " << k.velocity << std::endl << "rotation: " << k.rotation << std::endl;
 	}
     // ----------------------------------------------------------------------------
-    // This PlugIn uses two vehicle types: CtfSeeker and CtfPlayer.  They have a
+    // This PlugIn uses two vehicle types: CtfAgent and CtfPlayer.  They have a
     // common base class: CtfBase which is a specialization of SimpleVehicle.
 
 
@@ -241,8 +244,6 @@ namespace{
 
         // draw this character/vehicle into the scene
         void draw (void);
-
-        void randomizeStartingPositionAndHeading (void);
          
         // for draw method
         Color bodyColor;
@@ -250,18 +251,21 @@ namespace{
     	Kinematic k;
     };
 
-    class CtfSeeker : public CtfBase
+    class CtfAgent : public CtfBase
     {
     public:
 
         // constructor
-        CtfSeeker () {reset ();}
+        CtfAgent () {reset ();}
 
         // reset state
         void reset (void);
 
         // per frame simulation update
         void update (const float currentTime, const float elapsedTime);
+        
+        // Initial position
+		void startingPositionAndHeading();
 
         void draw (void);
         float lastRunningTime; // for auto-reset
@@ -280,6 +284,9 @@ namespace{
 
         // per frame simulation update
         void update (const float currentTime, const float elapsedTime);
+        
+        // Initial position
+		void startingPositionAndHeading();
         
         // draw
         void draw (void);
@@ -303,14 +310,11 @@ namespace{
     const Color seekColor      (0.3f, 0.6f, 0.6f); // annotation
     const Color clearPathColor (0.3f, 0.6f, 0.3f); // annotation
 
-
-    CtfSeeker* gSeeker = NULL;
-
     // count the number of times the simulation has reset (e.g. for overnight runs)
     int resetCount = 0;
 
 
-    CtfSeeker* ctfSeeker;
+    CtfAgent* ctfAgent;
     CtfPlayer* ctfPlayer;
 
 
@@ -322,17 +326,15 @@ namespace{
     {
         SimpleVehicle::reset ();  // reset the vehicle 
 
-        randomizeStartingPositionAndHeading ();  // new starting position
-
         clearTrailHistory ();     // prevent long streaks due to teleportation
     }
 
 
-    void CtfSeeker::reset (void)
+    void CtfAgent::reset (void)
     {
         CtfBase::reset ();
         bodyColor.set (0.4f, 0.4f, 0.6f); // blueish
-        gSeeker = this;
+        startingPositionAndHeading();
     }
 
 
@@ -340,6 +342,7 @@ namespace{
     {
         CtfBase::reset ();
         bodyColor.set (0.6f, 0.4f, 0.4f); // redish
+        startingPositionAndHeading();
     }
 
 
@@ -366,17 +369,29 @@ namespace{
     // ----------------------------------------------------------------------------
 
 
-    void CtfBase::randomizeStartingPositionAndHeading (void)
+    void CtfPlayer::startingPositionAndHeading (void)
     {
-        // randomize position on a ring between inner and outer radii
-        // centered around the home base
-        const float rRadius = frandom2 (gMinStartRadius, gMaxStartRadius);
-        const Vec3 randomOnRing = RandomUnitVectorOnXZPlane () * rRadius;
-        setPosition (gHomeBaseCenter + randomOnRing);
-        // randomize 2D heading
-        randomizeHeadingOnXZPlane ();
+        setPosition(playerInitialPos);
+		k.setPosition(playerInitialPos);
+		Vec3 initialOrientation (0.0f, 0.0f, 1.0f);
+		initialOrientation = initialOrientation.normalize();
+		k.orientation = Kinematic::getNewOrientation(k.orientation,initialOrientation);
+    	if(k.velocity != Vec3::zero)
+			regenerateOrthonormalBasisUF(initialOrientation);
     }
 
+
+    void CtfAgent::startingPositionAndHeading (void)
+    {
+        setPosition(agentInitialPos);
+		k.setPosition(agentInitialPos);
+		Vec3 initialOrientation (0.0f, 0.0f, 1.0f);
+		initialOrientation = initialOrientation.normalize();
+		k.orientation = Kinematic::getNewOrientation(k.orientation,initialOrientation);
+    	if(k.velocity != Vec3::zero)
+			regenerateOrthonormalBasisUF(initialOrientation);
+    }
+    
     void CtfPlayer::update (const float currentTime, const float elapsedTime){
     	SteeringOutput s;
     	// Vec3 direction  = k.velocity;
@@ -413,6 +428,8 @@ namespace{
 		
 		// Fix orientation
 		k.orientation = Kinematic::getNewOrientation(k.orientation,k.velocity);
+		if(k.velocity.length() < 0.1f)
+			k.velocity = Vec3::zero;
     	if(k.velocity != Vec3::zero)
     		regenerateOrthonormalBasisUF(k.velocity.normalize());
     	
@@ -420,7 +437,7 @@ namespace{
 		recordTrailVertex (currentTime, k.position);
     }
 
-    void CtfSeeker::draw (void){
+    void CtfAgent::draw (void){
         // first call the draw method in the base class
         CtfBase::draw();
 
@@ -441,7 +458,7 @@ namespace{
     // ----------------------------------------------------------------------------
     // update method for goal seeker
     
-    void CtfSeeker::update (const float currentTime, const float elapsedTime)
+    void CtfAgent::update (const float currentTime, const float elapsedTime)
     {
         SteeringOutput s;
         Vec3 dist = k.position - ctfPlayer->k.position;
@@ -480,12 +497,12 @@ namespace{
         {
 			srand(time(0));
             // create the seeker ("hero"/"attacker")
-            ctfSeeker = new CtfSeeker;
+            ctfAgent = new CtfAgent();
             Vec3 pos1 (1,0,1);
             Vec3 pos2 (5,0,5);
-            ctfSeeker->setPosition(pos1);
-            ctfSeeker->k.setPosition(pos1);
-            all.push_back (ctfSeeker);
+            ctfAgent->setPosition(pos1);
+            ctfAgent->k.setPosition(pos1);
+            all.push_back (ctfAgent);
 			ctfPlayer = new CtfPlayer;
 			ctfPlayer->setPosition(pos2);
 			ctfPlayer->k.setPosition(pos2);
@@ -508,7 +525,7 @@ namespace{
         void update (const float currentTime, const float elapsedTime)
         {
             // update the seeker
-            ctfSeeker->update (currentTime, elapsedTime);
+            ctfAgent->update (currentTime, elapsedTime);
           	ctfPlayer->update (currentTime, elapsedTime);
         }
 
@@ -535,7 +552,7 @@ namespace{
             OpenSteerDemo::gridUtility (gridCenter);
 
             // draw the seeker, obstacles and home base
-            ctfSeeker->draw();
+            ctfAgent->draw();
 
 			ctfPlayer->draw();
 
@@ -546,8 +563,8 @@ namespace{
         void close (void)
         {
             // delete seeker
-            delete (ctfSeeker);
-            ctfSeeker = NULL;
+            delete (ctfAgent);
+            ctfAgent = NULL;
 	
 			delete (ctfPlayer);
 			ctfPlayer = NULL;
@@ -562,11 +579,11 @@ namespace{
             resetCount++;
 
             // reset the seeker ("hero"/"attacker") and enemies
-            ctfSeeker->reset ();
+            ctfAgent->reset ();
             ctfPlayer->reset ();
 
             // reset camera position
-            OpenSteerDemo::position2dCamera (*ctfSeeker);
+            OpenSteerDemo::position2dCamera (*ctfAgent);
 
             // make camera jump immediately to new position
             OpenSteerDemo::camera.doNotSmoothNextMove ();

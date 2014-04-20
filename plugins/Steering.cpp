@@ -18,6 +18,9 @@
 namespace{
     using namespace OpenSteer;
     
+	Vec3 agentInitialPos (1,0,1);
+	Vec3 playerInitialPos (6,0,6);
+	
     // For float comparision
     class Compare{
 		public:
@@ -41,7 +44,7 @@ namespace{
 	
     // Update for proyectiles!
         
-    const Vec3 GRAVITY (0, -9.81, 0);
+    const Vec3 GRAVITY (0, -6.00, 0);
 	class SteeringOutput{
 		public:
 			Vec3 linear;
@@ -516,7 +519,6 @@ namespace{
 				a = points[segment];
 				b = points[segment + 1];
 				resultPoint = point + (b - a).normalize() * pathOffset;
-				std::cout << "resultPoint: " << resultPoint << ", point: " << point << ", direction: " << (b-a).normalize() << ", pathOffset: " << pathOffset << "(" << a << ", " << b << ")" << std::endl;
 				if(!isInSegment(a, b, resultPoint)){
 					if(pathOffset > 0.0f){
 						a = b;
@@ -774,8 +776,6 @@ namespace{
 
 		    // draw this character/vehicle into the scene
 		    void draw (void);
-
-		    void randomizeStartingPositionAndHeading (void);
 		     
 		    // for draw method
 		    Color bodyColor;
@@ -796,6 +796,9 @@ namespace{
 
 		    // per frame simulation update
 		    void update (const float currentTime, const float elapsedTime);
+			
+			// Initial object position
+		    void startingPositionAndHeading (void);
 	
 			// draw
 		    void draw (void);
@@ -822,6 +825,9 @@ namespace{
 
 		    // per frame simulation update
 		    void update (const float currentTime, const float elapsedTime);
+			
+			// Initial object position
+		    void startingPositionAndHeading (void);
 		    
 		    // draw
 		    void draw (void);
@@ -905,9 +911,6 @@ namespace{
     void CtfBase::reset (void)
     {
         SimpleVehicle::reset ();  // reset the vehicle 
-
-        randomizeStartingPositionAndHeading ();  // new starting position
-
         clearTrailHistory ();     // prevent long streaks due to teleportation
     }
 
@@ -916,6 +919,9 @@ namespace{
     {
         CtfBase::reset ();
         bodyColor.set (0.4f, 0.4f, 0.6f); // blueish
+        k.velocity = Vec3::zero;
+        startingPositionAndHeading ();  // new starting position
+
     }
 
 
@@ -925,6 +931,8 @@ namespace{
         jump = false;
         jpoint.jumpLocation = Vec3::zero;
         bodyColor.set (0.6f, 0.4f, 0.4f); // redish
+        startingPositionAndHeading ();  // new starting position
+
     }
 
 	void CtfProyectile::reset (void)
@@ -937,15 +945,26 @@ namespace{
     // ----------------------------------------------------------------------------
 
 
-    void CtfBase::randomizeStartingPositionAndHeading (void)
+    void CtfPlayer::startingPositionAndHeading (void)
     {
-        // randomize position on a ring between inner and outer radii
-        // centered around the home base
-        const float rRadius = frandom2 (gMinStartRadius, gMaxStartRadius);
-        const Vec3 randomOnRing = RandomUnitVectorOnXZPlane () * rRadius;
-        setPosition (gHomeBaseCenter + randomOnRing);
-        // randomize 2D heading
-        randomizeHeadingOnXZPlane ();
+        setPosition(playerInitialPos);
+		k.setPosition(playerInitialPos);
+		Vec3 initialOrientation (0.0f, 0.0f, 1.0f);
+		initialOrientation = initialOrientation.normalize();
+		k.orientation = Kinematic::getNewOrientation(k.orientation,initialOrientation);
+    	if(k.velocity != Vec3::zero)
+			regenerateOrthonormalBasisUF(initialOrientation);
+    }
+    
+    void CtfAgent::startingPositionAndHeading (void)
+    {
+        setPosition(agentInitialPos);
+		k.setPosition(agentInitialPos);
+		Vec3 initialOrientation (0.0f, 0.0f, 1.0f);
+		initialOrientation = initialOrientation.normalize();
+		k.orientation = Kinematic::getNewOrientation(k.orientation,initialOrientation);
+    	if(k.velocity != Vec3::zero)
+			regenerateOrthonormalBasisUF(initialOrientation);
     }
 
     void CtfPlayer::update (const float currentTime, const float elapsedTime){
@@ -966,12 +985,12 @@ namespace{
 			s.linear = (s.linear - direction) * k.maxAcceleration;
 			k.keymap['s' - 'a'] = 0;
 		}
-		// Strafe right
+		// Move right
 		if (k.keymap['d' - 'a']){
 			s.linear = (s.linear - left) * k.maxAcceleration;
 			k.keymap['d' - 'a'] = 0;
 		}
-		// Strafe left
+		// Move left
 		if (k.keymap['a' - 'a']){
 			s.linear = (s.linear + left) * k.maxAcceleration;
 			k.keymap['a' - 'a'] = 0;
@@ -1006,6 +1025,8 @@ namespace{
 		
 		// Fix orientation
 		k.orientation = Kinematic::getNewOrientation(k.orientation,k.velocity);
+		if(!jump && k.velocity.length() < 0.1f)
+			k.velocity = Vec3::zero;
     	if(k.velocity != Vec3::zero)
 			regenerateOrthonormalBasisUF(k.velocity.normalize());
 		recordTrailVertex (currentTime, k.position);
@@ -1093,14 +1114,10 @@ namespace{
 				srand(time(0));
 		        // create the seeker ("hero"/"attacker")
 		        ctfAgent = new CtfAgent;
-		        Vec3 pos1 (1,0,1);
-		        Vec3 pos2 (6,0,6);
-		        ctfAgent->setPosition(pos1);
-		        ctfAgent->k.setPosition(pos1);
+		        ctfAgent->startingPositionAndHeading();
 		        all.push_back (ctfAgent);
 				ctfPlayer = new CtfPlayer;
-				ctfPlayer->setPosition(pos2);
-				ctfPlayer->k.setPosition(pos2);
+				ctfPlayer->startingPositionAndHeading();
 				all.push_back (ctfPlayer);
 
 		        // initialize camera
@@ -1117,7 +1134,7 @@ namespace{
 		        ctfAgent->update (currentTime, elapsedTime);
 		      	ctfPlayer->update (currentTime, elapsedTime);
 		      	if(ctfPlayer->k.keymap['f' - 'a'] == 1){
-		      		fireVehicle(currentTime, *ctfPlayer, M_PI / 4, 10.0);
+		      		fireVehicle(currentTime, *ctfPlayer, M_PI / 4, 8.0);
 		      		ctfPlayer->k.keymap['f' - 'a'] = 0;
 		      	}
 		      	// update proyectiles
@@ -1125,7 +1142,9 @@ namespace{
 					(*it)->update (currentTime, elapsedTime);
 				
 				// Draw path
-				path.draw();
+		        steerFunc *getSteering = (steerFunc *)steerFunctions[steerFuncNum];
+				if(getSteering == SteeringFollowPath::getSteering)
+					path.draw();
 				
 				
 				if(path.isNearEnd(ctfAgent->k.position) || path.isNearBeginning(ctfAgent->k.position))
@@ -1212,7 +1231,6 @@ namespace{
 		    }
 			
 			void fireVehicle (const float currentTime, CtfBase& base, float angle, float mv){
-				std::cout << "VEHICLE FIRED FROM " << base.k.position << std::endl;
 				Vec3 direction;
 				Kinematic::orientationAsAVector(base.k.orientation,direction);
 				direction.y = cos(angle);
