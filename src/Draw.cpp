@@ -149,7 +149,7 @@ namespace {
                                const OpenSteer::Vec3& c,
                                const OpenSteer::Color& color)
     {
-        OpenSteer::warnIfInUpdatePhase ("iDrawTriangle");
+        //OpenSteer::warnIfInUpdatePhase ("iDrawTriangle");
         glColor3f (color.r(), color.g(), color.b());
         glBegin (GL_TRIANGLES);
         {

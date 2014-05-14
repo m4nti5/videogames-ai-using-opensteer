@@ -8,6 +8,9 @@
 #include <cstdlib>
 #include <vector>
 #include <iterator>
+#include <fstream>
+#include <string>
+#include <iomanip>
 #include <limits.h>
 #include <limits>
 #include <float.h>
@@ -17,6 +20,8 @@
 #include "OpenSteer/OpenSteerDemo.h"
 #include "OpenSteer/Color.h"
 
+#define WORLD_FILE	"../files/world.obj"
+#define MESH_FILE	"../files/mesh.obj"
 
 namespace{
     using namespace OpenSteer;
@@ -45,6 +50,8 @@ namespace{
     // Update for proyectiles!
         
     const Vec3 GRAVITY (0, -9.81, 0);
+    
+    // All steering behaviours will answer with this class
 	class SteeringOutput{
 		public:
 			Vec3 linear;
@@ -53,6 +60,7 @@ namespace{
 		SteeringOutput(const Vec3& v, float a): linear(v),angular(a) {}
 	};
 
+	// Handles the phisics information
 	class Kinematic{
 		public:
 			// Maximum velocity for ALL vehicles
@@ -81,7 +89,7 @@ namespace{
 			// Needed for Follow Path behaviour
 			Vec3 lastPathPoint;
 			
-			Kinematic(void): maxSpeed(4.0f), maxRotation(M_PI), maxAcceleration(10.0f), maxAngularAcceleration(20.0f), position(), orientation(0.0f), velocity(), rotation (0.0f), seekerStateString("") {}
+			Kinematic(void): maxSpeed(2.0f), maxRotation(M_PI), maxAcceleration(5.0f), maxAngularAcceleration(20.0f), position(), orientation(0.0f), velocity(), rotation (0.0f), seekerStateString("") {}
 			
 			Kinematic(float s, float r, float a, float aa, Vec3 p, float o, Vec3 v, float ro, std::string str): maxSpeed(s), maxRotation(r), maxAcceleration(a), maxAngularAcceleration(aa), position(p), orientation(o), velocity(v), rotation (ro), seekerStateString(str) {}
 			
@@ -575,7 +583,7 @@ namespace{
 				character.lastPathPoint = targetParam;
 				OpenSteer::drawLine(character.position, targetParam, gRed);		
 				
-				SteeringSeek::getSteering(seekTarget, character, steering);
+				SteeringArrive::getSteering(seekTarget, character, steering);
 				character.setBehaviourName("STEERINGFOLLOWPATH");
 				
 			}
@@ -764,6 +772,50 @@ namespace{
 		return o << "position: " << k.position << std::endl << "orientation: " << k.orientation << std::endl << "velocity: " << k.velocity << std::endl << "rotation: " << k.rotation << std::endl;
 	}
 	
+	
+	// Reading files for Walls and for nodes
+	template <class T>
+	class tuple{
+		public:
+			T first;
+			T second;
+			T third;
+			tuple (T f, T s, T t):first(f), second(s), third(t){}
+			tuple(){}
+	};
+
+	bool loadObj(const char* path, std::vector< Vec3 >& vertex, std::vector< tuple<int> >& triangles){
+		std::ifstream file;
+		std::string line;
+		int tn = 0;
+		char op, newline;
+		tuple <int> t;
+		Vec3 v;
+		file.open(path, std::ios::in);
+		if(!file.is_open())
+			return false;
+		while(file >> op){
+			switch(op){
+				case 'v':
+					file >> std::setprecision(6) >> std::fixed >> v.x >> v.y >> v.z;
+					vertex.push_back(v);
+					break;
+				case 'f':
+					file >> t.first >> t.second >> t.third;
+					triangles.push_back(t);
+					break;
+				case '\n':
+					break;
+				default:
+					getline(file, line);
+					break;
+			}
+		}
+		file.close();
+		return false;
+	}
+	
+	// Connection class (to connect nodes)
 	class Connection{
 		public:
 			int toNode;
@@ -795,9 +847,81 @@ namespace{
 	
 	const Connection Connection::None (-1,-1,0.0f);
 	
+	// Represents a polygon in the game
+	class Polygon{
+		public:
+			Vec3 v0, v1, v2, normal;
+			Polygon(){}
+			Polygon(const Vec3& v_0, const Vec3& v_1, const Vec3& v_2):v0(v_0), v1(v_1), v2(v_2){
+				calculateNormal();
+			}
+		
+			void setVertex(const Vec3& v_0, const Vec3& v_1, const Vec3& v_2){
+				v0 = v_0, v1 = v_1, v2 = v_2;
+				calculateNormal();
+			}
+			
+			void draw(){
+				Color color;
+				if(normal.y > 0.1f)
+					color.setR(.5f), color.setG(.5f), color.setB(.5f);
+				else
+					color.setR(0.6f), color.setG(0.6f), color.setB(0.0f);
+					
+				Vec3 v_0(v0),v_1(v1),v_2(v2);
+				v_0.y - 0.4;
+				v_1.y - 0.4;
+				v_2.y - 0.4;
+				drawTriangle(v_0, v_1, v_2, color);
+			}
+			
+			void drawMesh(){
+				Vec3 v_0(v0),v_1(v1),v_2(v2);
+				v_0.y - 0.2;
+				v_1.y - 0.2;
+				v_2.y - 0.2;
+				drawLine(v_0, v_1, gOrange);
+				drawLine(v_1, v_2, gOrange);
+				drawLine(v_2, v_0, gOrange);
+			}
+			
+			bool isConnected(const Polygon& p){
+				if(p.v0 == v0 || p.v0 == v1 || p.v0 == v2)
+					return true;
+				if(p.v1 == v0 || p.v1 == v1 || p.v1 == v2)
+					return true;
+				if(p.v2 == v0 || p.v2 == v1 || p.v2 == v2)
+					return true;
+				return false;
+			}
+			
+			void getCenter(Vec3& center){
+				center.x = (v0.x + v1.x + v2.x) / 3;
+				center.y = (v0.y + v1.y + v2.y) / 3;
+				center.z = (v0.z + v1.z + v2.z) / 3;
+			}
+			
+			inline Polygon operator= (const Polygon& p) {
+				this->v0 = p.v0;
+				this->v1 = p.v1;
+				this->v2 = p.v2;
+				this->normal = p.normal;
+				return *this;
+			}
+			
+		private:
+			void calculateNormal(){
+				Vec3 e0 = v1 - v0;
+				Vec3 e1 = v2 - v0;
+				normal = crossProduct(e0, e1);
+				normal = normal.normalize();
+			}
+	};
+	
 	class Node{
 		public:
 			int id;
+			Polygon p;
 			std::vector<Connection> adyacents;
 			Vec3 position;
 			static const Node None;
@@ -822,6 +946,7 @@ namespace{
 				this->position = n.position;
 				this->id = n.id;
 				this->adyacents = n.adyacents;
+				this->p = n.p;
 				return *this;
 			}
 					
@@ -857,6 +982,24 @@ namespace{
 				return node_id;
 			}
 			
+			void addPolygon(Polygon& p){
+				int node_id = lastid++;
+				float cost;
+				Vec3 position;
+				p.getCenter(position);
+				std::cout << "Agregando poly " << p.v0 << " " << p.v1 << " " << p.v2 << ", con centro: " << position << std::endl;
+				Node n (node_id, position);
+				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end();++it){
+					if((*it).p.isConnected(p)){
+						cost = ((*it).position - position).length();
+						(*it).addConnection(node_id, cost);
+						n.addConnection((*it).id, cost);
+					}
+				}
+				n.p = p;
+				nodes.push_back(n);
+			}
+			
 			void addConnection(int a, int b, float cost){
 				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end();++it){
 					if((*it).id == a)
@@ -882,14 +1025,15 @@ namespace{
 			void draw(){
 				for(std::vector<Node>::iterator n = nodes.begin();n != nodes.end();++n){
 					Vec3 p1 = (*n).position;
-					drawCircleOrDisk (0.25, Vec3 (0.0f,1.0f,0.0f), p1, gOrange, 30, true, true);
+					//drawCircleOrDisk (0.25, Vec3 (0.0f,1.0f,0.0f), p1, gOrange, 30, true, true);
+					(*n).p.drawMesh();
 					std::ostringstream node_id;
 					node_id << (*n).id << std::endl;
 					draw2dTextAt3dLocation (node_id, p1, gWhite, drawGetWindowWidth(), drawGetWindowHeight());
 
 					for(std::vector<Connection>::iterator c = (*n).adyacents.begin(); c!= (*n).adyacents.end();++c){
 						Vec3 p2 = nodes[(*c).toNode].position;
-						OpenSteer::drawLine(p1, p2, gOrange);
+						OpenSteer::drawLine(p1, p2, gRed);
 						
 						Vec3 tpos = p2 - p1;
 						float l = tpos.length();
@@ -952,7 +1096,6 @@ namespace{
 		g.addConnection(n3, n4, (p3 - p4).length());
 		g.addConnection(n3, n5, (p3 - p5).length());
 		g.addConnection(n4, n6, (p4 - p6).length());
-		*/
 		Vec3 p0 (0.0f, 0.0f, 0.0f);
 		Vec3 p1 (5.0f, 0.0f, -2.0f);
 		Vec3 p2 (10.0f, 0.0f, -5.0f);
@@ -977,6 +1120,15 @@ namespace{
 		g.addConnection(n3, n4, (p3 - p4).length());
 		g.addConnection(n4, n6, (p4 - p6).length());
 		g.addConnection(n5, n6, (p5 - p6).length() + 5.0f);
+		*/
+		std::vector< Vec3 > vertex;
+		std::vector< tuple<int> > triangles;
+		loadObj(MESH_FILE, vertex, triangles);
+		std::cout << "Cargado los meshes, " << triangles.size() << " poligonos!!!" << std::endl;
+		for(std::vector< tuple<int> >::iterator it = triangles.begin(); it != triangles.end(); ++it){
+			Polygon p(vertex[(*it).first - 1], vertex[(*it).second - 1], vertex[(*it).third - 1]);
+			g.addPolygon(p);
+		}
 	}
 	
 	
@@ -1364,8 +1516,27 @@ namespace{
 
     CtfAgent* ctfAgent;
     CtfPlayer* ctfPlayer;
+	
+	std::vector<Polygon> walls;
 
-
+	// loadWorld
+	
+	void loadWorld(){
+		std::vector< Vec3 > vertex;
+		std::vector< tuple<int> > triangles;
+		loadObj(WORLD_FILE, vertex, triangles);
+		std::cout << "Cargado el mundo, " << triangles.size() << " poligonos!!!" << std::endl;
+		for(std::vector< tuple<int> >::iterator it = triangles.begin(); it != triangles.end(); ++it){
+			Polygon p(vertex[(*it).first - 1], vertex[(*it).second - 1], vertex[(*it).third - 1]);
+			walls.push_back(p);
+		}
+	}
+	
+	// clear world
+	void clearWorld(){
+		walls.clear();
+	}
+	
     // ----------------------------------------------------------------------------
     // reset state
 
@@ -1539,9 +1710,9 @@ namespace{
 
 		    void open (void)
 		    {
-		    	steerFunctions.push_back(SteeringArrive::getSteering);
-		    	/*
 		    	steerFunctions.push_back(SteeringFollowPath::getSteering);
+		    	/*
+		    	steerFunctions.push_back(SteeringArrive::getSteering);
 		    	steerFunctions.push_back(SteeringPriority::getSteering);
 		    	steerFunctions.push_back(SteeringCollisionAvoidance::getSteering);
 		    	steerFunctions.push_back(SteeringSeparation::getSteering);
@@ -1566,6 +1737,7 @@ namespace{
 		        ctfAgent = new CtfAgent;
 		        Vec3 pos1 (1,0,1);
 		        Vec3 pos2 (6,0,6);
+		        g.nodes[0].p.getCenter(pos1);
 		        ctfAgent->setPosition(pos1);
 		        ctfAgent->k.setPosition(pos1);
 		        all.push_back (ctfAgent);
@@ -1573,6 +1745,7 @@ namespace{
 				ctfPlayer->setPosition(pos2);
 				ctfPlayer->k.setPosition(pos2);
 				all.push_back (ctfPlayer);
+				loadWorld();
 
 		        // initialize camera
 		        OpenSteerDemo::init2dCamera (*ctfPlayer);
@@ -1605,10 +1778,14 @@ namespace{
 				// Find A* path
 				Path p;
 				if(runAStar)
-					PathFinding::pathFindDijkstra(g, g.nodes[0], g.nodes[g.nodes.size() - 1], p);
-					//PathFinding::pathFindAStar(g, g.nodes[0], g.nodes[g.nodes.size() - 1], p);
+					//PathFinding::pathFindDijkstra(g, g.nodes[0], g.nodes[g.nodes.size() - 1], p);
+					PathFinding::pathFindAStar(g, g.nodes[0], g.nodes[26], p);
 				p.draw();
 				
+		      	// draw walls
+		      	for(std::vector<Polygon>::iterator it = walls.begin() ; it != walls.end(); ++it)
+					(*it).draw();
+
 				if(path.isNearEnd(ctfAgent->k.position) || path.isNearBeginning(ctfAgent->k.position))
 					SteeringFollowPath::pathOffset *= -1.0f;
 				
@@ -1675,6 +1852,9 @@ namespace{
 		        
 		        // clear the proyectiles
 		        proyectiles.clear();
+		        
+		        // clear all the world
+		        clearWorld();
 		    }
 
 		    void reset (void)
