@@ -25,6 +25,12 @@
 
 namespace{
     using namespace OpenSteer;
+	int INIT_NODE_PATH = 0;
+	int END_NODE_PATH = 26;
+	
+    // Update for proyectiles!
+        
+    const Vec3 GRAVITY (0, -9.81, 0);
     
     // For float comparision
     class Compare{
@@ -47,10 +53,203 @@ namespace{
 			}
 	};
 	
-    // Update for proyectiles!
-        
-    const Vec3 GRAVITY (0, -9.81, 0);
+	// Path class
+	class Path{
+		public:
+			std::vector<Vec3> points;
+			Path(){}
+			
+			void addPoint(Vec3 &point){
+				points.push_back(point);
+			}
+			
+			void draw(){
+				int i,n = points.size();
+				for(i = 0;i < n - 1; i++){
+					Vec3 a = points[i];
+					Vec3 b = points[i + 1];
+					OpenSteer::drawLine(a, b, gWhite);				
+				}
+			}
+			
+			void clearPath(){
+				points.clear();
+			}
+			
+			void getNormalPoint(const Vec3& p, const Vec3& a, const Vec3& b, Vec3 &normal){
+				Vec3 ap = p - a;
+				Vec3 ab = b - a;
+				ab = ab.normalize();
+				Vec3 proy = ab * ap.dot(ab);
+				normal = a + proy;
+			}
+			
+			bool isInSegment(const Vec3& a, const Vec3& b, const Vec3& p){
+				float distA, distB ,distSegment;
+				// distance to a
+				distA = (p - a).length();
+				// distance to b
+				distB = (p - b).length();
+				distSegment = (b - a).length();
+				if(distA < distSegment && distB < distSegment){
+					return true;
+				}
+				return false;
+			}
+			
+			void getClosestPoint(const Vec3& p, Vec3& closestPoint, int& segment){
+				int i,n = points.size();
+				float min = std::numeric_limits<float>::infinity(), distToCandidate, distToPoint;
+				Vec3 candidatePoint, a, b;
+				for(i = 0;i < n - 1; i++){
+					a = points[i];
+					b = points[i + 1];
+					getNormalPoint(p, a, b, candidatePoint);
+					
+					if(isInSegment(a, b, candidatePoint)){
+						distToCandidate = (candidatePoint - p).length();
+					}else{
+						distToCandidate = (p - b).length();
+						distToPoint = (p - a).length();
+						candidatePoint = b;
+						if(distToPoint < distToCandidate){
+							distToCandidate = distToPoint;
+							candidatePoint = a;
+						}
+					}
+					if(distToCandidate < min){
+						min = distToCandidate;
+						closestPoint = candidatePoint;
+						segment = i;
+					}
+				}
+				OpenSteer::drawLine(p, closestPoint, gYellow);	
+			}
+			
+			bool isNearEnd(const Vec3& p){
+				Vec3 lastPoint = points[points.size() - 1];
+				if((p - lastPoint).length() < 0.1f)
+					return true;
+				return false;
+			}
+			
+			bool isNearBeginning(const Vec3& p){
+				Vec3 firstPoint = points[0];
+				if((p - firstPoint).length() < 0.1f)
+					return true;
+				return false;
+			}
+			
+			void getPosition(Vec3 &point, int segment, float pathOffset, Vec3& resultPoint){
+				Vec3 a,b;
+				int n = points.size();
+				a = points[segment];
+				b = points[segment + 1];
+				resultPoint = point + (b - a).normalize() * pathOffset;
+				if(!isInSegment(a, b, resultPoint)){
+					if(pathOffset > 0.0f){
+						a = b;
+						b = points[segment + 2];
+						resultPoint = a + (b - a).normalize() * pathOffset;
+					}else{
+						b = points[segment - 1];
+						resultPoint = a + (a - b).normalize() * pathOffset;
+					}
+				}
+			}
+			
+			void reverse(){
+				std::reverse(points.begin(), points.end());
+			}
+			
+			int size(){
+				return points.size();
+			}
+			
+			std::ostream& print(std::ostream &o) const{
+				for(std::vector<Vec3>::const_iterator it = points.begin(); it != points.end(); ++it)
+					o << (*it) << ", ";
+				o << std::endl;
+				return o;
+			}
+			
+	};
     
+	inline std::ostream& operator<< (std::ostream& o, const Path& p){
+		return p.print(o);
+	}
+	
+	// Represents a polygon in the game
+	class Polygon{
+		public:
+			Vec3 v0, v1, v2, normal;
+			Polygon(){}
+			Polygon(const Vec3& v_0, const Vec3& v_1, const Vec3& v_2):v0(v_0), v1(v_1), v2(v_2){
+				calculateNormal();
+			}
+		
+			void setVertex(const Vec3& v_0, const Vec3& v_1, const Vec3& v_2){
+				v0 = v_0, v1 = v_1, v2 = v_2;
+				calculateNormal();
+			}
+			
+			void draw(){
+				Color color;
+				if(normal.y > 0.1f)
+					color.setR(.5f), color.setG(.5f), color.setB(.5f);
+				else
+					color.setR(0.6f), color.setG(0.6f), color.setB(0.0f);
+					
+				Vec3 v_0(v0),v_1(v1),v_2(v2);
+				v_0.y - 1.0f;
+				v_1.y - 1.0f;
+				v_2.y - 1.0f;
+				drawTriangle(v_0, v_1, v_2, color);
+			}
+			
+			void drawMesh(){
+				Vec3 v_0(v0),v_1(v1),v_2(v2);
+				v_0.y - 0.2;
+				v_1.y - 0.2;
+				v_2.y - 0.2;
+				drawLine(v_0, v_1, gOrange);
+				drawLine(v_1, v_2, gOrange);
+				drawLine(v_2, v_0, gOrange);
+			}
+			
+			bool isConnected(const Polygon& p){
+				if(p.v0 == v0 || p.v0 == v1 || p.v0 == v2)
+					return true;
+				if(p.v1 == v0 || p.v1 == v1 || p.v1 == v2)
+					return true;
+				if(p.v2 == v0 || p.v2 == v1 || p.v2 == v2)
+					return true;
+				return false;
+			}
+			
+			void getCenter(Vec3& center){
+				center.x = (v0.x + v1.x + v2.x) / 3;
+				center.y = (v0.y + v1.y + v2.y) / 3;
+				center.z = (v0.z + v1.z + v2.z) / 3;
+			}
+			
+			inline Polygon operator= (const Polygon& p) {
+				this->v0 = p.v0;
+				this->v1 = p.v1;
+				this->v2 = p.v2;
+				this->normal = p.normal;
+				return *this;
+			}
+			
+		private:
+			void calculateNormal(){
+				Vec3 e0 = v1 - v0;
+				Vec3 e1 = v2 - v0;
+				normal = crossProduct(e0, e1);
+				normal = normal.normalize();
+			}
+	};
+	
     // All steering behaviours will answer with this class
 	class SteeringOutput{
 		public:
@@ -88,8 +287,12 @@ namespace{
 			float wanderOrientation;
 			// Needed for Follow Path behaviour
 			Vec3 lastPathPoint;
+			// Saves the last polygon the agent was
+			Polygon lastNode;
+			// For FollowPath Steering
+			Path path;
 			
-			Kinematic(void): maxSpeed(2.0f), maxRotation(M_PI), maxAcceleration(5.0f), maxAngularAcceleration(20.0f), position(), orientation(0.0f), velocity(), rotation (0.0f), seekerStateString("") {}
+			Kinematic(void): maxSpeed(2.0f), maxRotation(M_PI), maxAcceleration(13.0f), maxAngularAcceleration(20.0f), position(), orientation(0.0f), velocity(), rotation (0.0f), seekerStateString("") {}
 			
 			Kinematic(float s, float r, float a, float aa, Vec3 p, float o, Vec3 v, float ro, std::string str): maxSpeed(s), maxRotation(r), maxAcceleration(a), maxAngularAcceleration(aa), position(p), orientation(o), velocity(v), rotation (ro), seekerStateString(str) {}
 			
@@ -137,7 +340,7 @@ namespace{
 			}
 			
 	        Kinematic operator= (const Kinematic& k) {
-	        	maxSpeed=k.maxSpeed, maxRotation=k.maxRotation, maxAcceleration=k.maxAcceleration, maxAngularAcceleration=k.maxAngularAcceleration, position=k.position, orientation=k.orientation, velocity=k.velocity, rotation=k.rotation;
+	        	maxSpeed=k.maxSpeed, maxRotation=k.maxRotation, maxAcceleration=k.maxAcceleration, maxAngularAcceleration=k.maxAngularAcceleration, position=k.position, orientation=k.orientation, velocity=k.velocity, rotation=k.rotation, lastPathPoint = k.lastPathPoint, lastNode = k.lastNode;
 	        	seekerStateString = k.seekerStateString;
 	        	return *this;
 	        }
@@ -198,11 +401,12 @@ namespace{
 	
 	class SteeringArrive{
 		private:
-			static const float targetRadius;
 			static const float slowRadius;
 			static const float timeToTarget;
 			
 		public:
+			static const float targetRadius;
+			
 			static void getSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering){
 				Vec3 direction = target.position - character.position,targetVelocity;
 				float distance = direction.length(),targetSpeed;
@@ -434,117 +638,6 @@ namespace{
 	
 	const float SteeringSeparation::threshold = 3.0f;
 	const float SteeringSeparation::decayCoefficient = 3.0f;
-	
-	class Path{
-		public:
-			std::vector<Vec3> points;
-			Path(){}
-			
-			void addPoint(Vec3 &point){
-				points.push_back(point);
-			}
-			
-			void draw(){
-				int i,n = points.size();
-				for(i = 0;i < n - 1; i++){
-					Vec3 a = points[i];
-					Vec3 b = points[i + 1];
-					OpenSteer::drawLine(a, b, gWhite);				
-				}
-			}
-			
-			void clearPath(){
-				points.clear();
-			}
-			
-			void getNormalPoint(const Vec3& p, const Vec3& a, const Vec3& b, Vec3 &normal){
-				Vec3 ap = p - a;
-				Vec3 ab = b - a;
-				ab = ab.normalize();
-				Vec3 proy = ab * ap.dot(ab);
-				normal = a + proy;
-			}
-			
-			bool isInSegment(const Vec3& a, const Vec3& b, const Vec3& p){
-				float distA, distB ,distSegment;
-				// distance to a
-				distA = (p - a).length();
-				// distance to b
-				distB = (p - b).length();
-				distSegment = (b - a).length();
-				if(distA < distSegment && distB < distSegment){
-					return true;
-				}
-				return false;
-			}
-			
-			void getClosestPoint(const Vec3& p, Vec3& closestPoint, int& segment){
-				int i,n = points.size();
-				float min = std::numeric_limits<float>::infinity(), distToCandidate, distToPoint;
-				Vec3 candidatePoint, a, b;
-				for(i = 0;i < n - 1; i++){
-					a = points[i];
-					b = points[i + 1];
-					getNormalPoint(p, a, b, candidatePoint);
-					
-					if(isInSegment(a, b, candidatePoint)){
-						distToCandidate = (candidatePoint - p).length();
-					}else{
-						distToCandidate = (p - b).length();
-						distToPoint = (p - a).length();
-						candidatePoint = b;
-						if(distToPoint < distToCandidate){
-							distToCandidate = distToPoint;
-							candidatePoint = a;
-						}
-					}
-					if(distToCandidate < min){
-						min = distToCandidate;
-						closestPoint = candidatePoint;
-						segment = i;
-					}
-				}
-				OpenSteer::drawLine(p, closestPoint, gYellow);	
-			}
-			
-			bool isNearEnd(const Vec3& p){
-				Vec3 lastPoint = points[points.size() - 1];
-				if((p - lastPoint).length() < 0.1f)
-					return true;
-				return false;
-			}
-			
-			bool isNearBeginning(const Vec3& p){
-				Vec3 firstPoint = points[0];
-				if((p - firstPoint).length() < 0.1f)
-					return true;
-				return false;
-			}
-			
-			void getPosition(Vec3 &point, int segment, float pathOffset, Vec3& resultPoint){
-				Vec3 a,b;
-				int n = points.size();
-				a = points[segment];
-				b = points[segment + 1];
-				resultPoint = point + (b - a).normalize() * pathOffset;
-				//std::cout << "resultPoint: " << resultPoint << ", point: " << point << ", direction: " << (b-a).normalize() << ", pathOffset: " << pathOffset << "(" << a << ", " << b << ")" << std::endl;
-				if(!isInSegment(a, b, resultPoint)){
-					if(pathOffset > 0.0f){
-						a = b;
-						b = points[segment + 2];
-						resultPoint = a + (b - a).normalize() * pathOffset;
-					}else{
-						b = points[segment - 1];
-						resultPoint = a + (a - b).normalize() * pathOffset;
-					}
-				}
-			}
-			
-			void reverse(){
-				std::reverse(points.begin(), points.end());
-			}
-			
-	};
     
     Path path;
     
@@ -572,10 +665,10 @@ namespace{
 				Vec3 futurePos = character.position + character.velocity * predictTime;
 				Vec3 currentParam;
 				int segment = 0;
-				path.getClosestPoint(futurePos, currentParam, segment);
+				character.path.getClosestPoint(futurePos, currentParam, segment);
 				
 				Vec3 targetParam;
-				path.getPosition(currentParam, segment, pathOffset, targetParam);
+				character.path.getPosition(currentParam, segment, pathOffset, targetParam);
 				
 				Kinematic seekTarget;
 				seekTarget.position = targetParam;
@@ -583,7 +676,8 @@ namespace{
 				character.lastPathPoint = targetParam;
 				OpenSteer::drawLine(character.position, targetParam, gRed);		
 				
-				SteeringArrive::getSteering(seekTarget, character, steering);
+				//SteeringArrive::getSteering(seekTarget, character, steering);
+				SteeringSeek::getSteering(seekTarget, character, steering);
 				character.setBehaviourName("STEERINGFOLLOWPATH");
 				
 			}
@@ -846,78 +940,6 @@ namespace{
 	};
 	
 	const Connection Connection::None (-1,-1,0.0f);
-	
-	// Represents a polygon in the game
-	class Polygon{
-		public:
-			Vec3 v0, v1, v2, normal;
-			Polygon(){}
-			Polygon(const Vec3& v_0, const Vec3& v_1, const Vec3& v_2):v0(v_0), v1(v_1), v2(v_2){
-				calculateNormal();
-			}
-		
-			void setVertex(const Vec3& v_0, const Vec3& v_1, const Vec3& v_2){
-				v0 = v_0, v1 = v_1, v2 = v_2;
-				calculateNormal();
-			}
-			
-			void draw(){
-				Color color;
-				if(normal.y > 0.1f)
-					color.setR(.5f), color.setG(.5f), color.setB(.5f);
-				else
-					color.setR(0.6f), color.setG(0.6f), color.setB(0.0f);
-					
-				Vec3 v_0(v0),v_1(v1),v_2(v2);
-				v_0.y - 0.4;
-				v_1.y - 0.4;
-				v_2.y - 0.4;
-				drawTriangle(v_0, v_1, v_2, color);
-			}
-			
-			void drawMesh(){
-				Vec3 v_0(v0),v_1(v1),v_2(v2);
-				v_0.y - 0.2;
-				v_1.y - 0.2;
-				v_2.y - 0.2;
-				drawLine(v_0, v_1, gOrange);
-				drawLine(v_1, v_2, gOrange);
-				drawLine(v_2, v_0, gOrange);
-			}
-			
-			bool isConnected(const Polygon& p){
-				if(p.v0 == v0 || p.v0 == v1 || p.v0 == v2)
-					return true;
-				if(p.v1 == v0 || p.v1 == v1 || p.v1 == v2)
-					return true;
-				if(p.v2 == v0 || p.v2 == v1 || p.v2 == v2)
-					return true;
-				return false;
-			}
-			
-			void getCenter(Vec3& center){
-				center.x = (v0.x + v1.x + v2.x) / 3;
-				center.y = (v0.y + v1.y + v2.y) / 3;
-				center.z = (v0.z + v1.z + v2.z) / 3;
-			}
-			
-			inline Polygon operator= (const Polygon& p) {
-				this->v0 = p.v0;
-				this->v1 = p.v1;
-				this->v2 = p.v2;
-				this->normal = p.normal;
-				return *this;
-			}
-			
-		private:
-			void calculateNormal(){
-				Vec3 e0 = v1 - v0;
-				Vec3 e1 = v2 - v0;
-				normal = crossProduct(e0, e1);
-				normal = normal.normalize();
-			}
-	};
-	
 	class Node{
 		public:
 			int id;
@@ -987,7 +1009,6 @@ namespace{
 				float cost;
 				Vec3 position;
 				p.getCenter(position);
-				std::cout << "Agregando poly " << p.v0 << " " << p.v1 << " " << p.v2 << ", con centro: " << position << std::endl;
 				Node n (node_id, position);
 				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end();++it){
 					if((*it).p.isConnected(p)){
@@ -1659,6 +1680,22 @@ namespace{
     {
         SteeringOutput s;
         steerFunc *getSteering = (steerFunc *)steerFunctions[steerFuncNum];
+        if(getSteering == SteeringFollowPath::getSteering){
+        	if(k.path.size() == 0){
+				// Find A* path
+				PathFinding::pathFindAStar(g, g.nodes[INIT_NODE_PATH], g.nodes[END_NODE_PATH], k.path);
+        	}else{
+        		// If arrived then turn back
+        		if((k.lastPathPoint - g.nodes[END_NODE_PATH].position).length() <= SteeringArrive::targetRadius){
+        			int aux = INIT_NODE_PATH;
+        			INIT_NODE_PATH = END_NODE_PATH;
+        			END_NODE_PATH = aux; 
+        			k.path.clearPath();
+        			PathFinding::pathFindAStar(g, g.nodes[INIT_NODE_PATH], g.nodes[END_NODE_PATH], k.path);
+        		}
+        	}
+			k.path.draw();
+        }
         (*getSteering)(ctfPlayer->k,k,s);
 		k.update(s,elapsedTime);
 		
@@ -1696,7 +1733,6 @@ namespace{
     // PlugIn for OpenSteerDemo
 
 	bool drawGraph = true;
-	bool runAStar = true;
 	
     class CtfPlugIn : public PlugIn
     {
@@ -1737,13 +1773,14 @@ namespace{
 		        ctfAgent = new CtfAgent;
 		        Vec3 pos1 (1,0,1);
 		        Vec3 pos2 (6,0,6);
-		        g.nodes[0].p.getCenter(pos1);
+		        pos1 = g.nodes[0].position;
 		        ctfAgent->setPosition(pos1);
 		        ctfAgent->k.setPosition(pos1);
 		        all.push_back (ctfAgent);
 				ctfPlayer = new CtfPlayer;
 				ctfPlayer->setPosition(pos2);
 				ctfPlayer->k.setPosition(pos2);
+				ctfPlayer->k.maxSpeed = 3.0f;
 				all.push_back (ctfPlayer);
 				loadWorld();
 
@@ -1774,13 +1811,6 @@ namespace{
 				// Draw graph
 				if(drawGraph)
 					g.draw();
-				
-				// Find A* path
-				Path p;
-				if(runAStar)
-					//PathFinding::pathFindDijkstra(g, g.nodes[0], g.nodes[g.nodes.size() - 1], p);
-					PathFinding::pathFindAStar(g, g.nodes[0], g.nodes[26], p);
-				p.draw();
 				
 		      	// draw walls
 		      	for(std::vector<Polygon>::iterator it = walls.begin() ; it != walls.end(); ++it)
@@ -1897,9 +1927,6 @@ namespace{
 		    			break;
 		    		case 3:
 		    			drawGraph = !drawGraph;
-		    			break;
-		    		case 4:
-		    			runAStar = !runAStar;
 		    			break;
 		    	}
 		    }
