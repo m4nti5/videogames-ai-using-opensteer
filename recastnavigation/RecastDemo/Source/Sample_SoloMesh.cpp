@@ -691,6 +691,19 @@ bool Sample_SoloMesh::handleBuild()
 	if (m_tool)
 		m_tool->init(this);
 	initToolStates(this);
-
+	
+	printf("IMPRIMIENDO MESHES!!!!**************\n\n");
+    if (m_pmesh)
+    {
+        FileIO io;
+        io.openForWrite("pmeshOutput.obj");
+        duDumpPolyMeshToObj(*m_pmesh, &io);
+    }
+    if (m_dmesh)
+    {
+        FileIO io;
+        io.openForWrite("dmeshOutput.obj");
+        duDumpPolyMeshDetailToObj(*m_dmesh, &io);
+    }
 	return true;
 }
