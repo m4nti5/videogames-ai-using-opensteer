@@ -19,18 +19,20 @@
 #include "OpenSteer/SimpleVehicle.h"
 #include "OpenSteer/OpenSteerDemo.h"
 #include "OpenSteer/Color.h"
+#include "OpenSteer/cpphop.hpp"
 
-#define WORLD_FILE	"../files/world.obj"
-#define MESH_FILE	"../files/mesh.obj"
+#define WORLD_FILE	"../files/world2.obj"
+#define MESH_FILE	"../files/mesh2.obj"
 
 namespace{
     using namespace OpenSteer;
-	int INIT_NODE_PATH = 0;
-	int END_NODE_PATH = 26;
+	float SAFE_DISTANCE = 15.0f;
 	
     // Update for proyectiles!
         
     const Vec3 GRAVITY (0, -9.81, 0);
+    const Vec3 playerStartPosition (10.0, 0.0, 25.0);
+    const Vec3 computerStartPosition (90.0, 0.0, 25.0);
     
     // For float comparision
     class Compare{
@@ -59,8 +61,13 @@ namespace{
 			std::vector<Vec3> points;
 			Path(){}
 			
-			void addPoint(Vec3 &point){
+			void addPoint(const Vec3 &point){
 				points.push_back(point);
+			}
+			
+			void addPoint(float x, float y, float z){
+				Vec3 p(x,y,z);
+				points.push_back(p);
 			}
 			
 			void draw(){
@@ -128,14 +135,14 @@ namespace{
 			
 			bool isNearEnd(const Vec3& p){
 				Vec3 lastPoint = points[points.size() - 1];
-				if((p - lastPoint).length() < 0.1f)
+				if((p - lastPoint).length() < 0.5f)
 					return true;
 				return false;
 			}
 			
 			bool isNearBeginning(const Vec3& p){
 				Vec3 firstPoint = points[0];
-				if((p - firstPoint).length() < 0.1f)
+				if((p - firstPoint).length() < 0.5f)
 					return true;
 				return false;
 			}
@@ -171,6 +178,10 @@ namespace{
 					o << (*it) << ", ";
 				o << std::endl;
 				return o;
+			}
+			
+			inline Vec3& operator[] (std::size_t idx){
+				return points[idx];
 			}
 			
 	};
@@ -217,6 +228,16 @@ namespace{
 				drawLine(v_2, v_0, gOrange);
 			}
 			
+			bool segmentCheck(const Vec3 &v0, const Vec3 &v1, const Polygon &p){
+				if((p.v0 == v0 && p.v1 == v1) || (p.v0 == v1 && p.v1 == v0))
+					return true;
+				if((p.v1 == v0 && p.v2 == v1) || (p.v1 == v1 && p.v2 == v0))
+					return true;
+				if((p.v2 == v0 && p.v0 == v1) || (p.v2 == v1 && p.v0 == v0))
+					return true;
+				return false;
+			}
+			
 			bool isConnected(const Polygon& p){
 				if(p.v0 == v0 || p.v0 == v1 || p.v0 == v2)
 					return true;
@@ -224,6 +245,16 @@ namespace{
 					return true;
 				if(p.v2 == v0 || p.v2 == v1 || p.v2 == v2)
 					return true;
+					
+				/*
+				if(segmentCheck(v0, v1, p))
+					return true;
+				if(segmentCheck(v1, v2, p))
+					return true;
+				if(segmentCheck(v2, v0, p))
+					return true;
+				
+				*/
 				return false;
 			}
 			
@@ -241,12 +272,54 @@ namespace{
 				return *this;
 			}
 			
+			bool insidePolygon(const Vec3 &pt){
+				bool b1, b2, b3;
+
+				b1 = sign(pt, v0, v1) < 0.0f;
+				b2 = sign(pt, v1, v2) < 0.0f;
+				b3 = sign(pt, v2, v0) < 0.0f;
+
+				return ((b1 == b2) && (b2 == b3));
+			}
+			
+			bool insidePolygonxy(const Vec3 &pt){
+				bool b1, b2, b3;
+
+				b1 = signxy(pt, v0, v1) < 0.0f;
+				b2 = signxy(pt, v1, v2) < 0.0f;
+				b3 = signxy(pt, v2, v0) < 0.0f;
+
+				return ((b1 == b2) && (b2 == b3));
+			}
+			
+			bool insidePolygonyz(const Vec3 &pt){
+				bool b1, b2, b3;
+
+				b1 = signyz(pt, v0, v1) < 0.0f;
+				b2 = signyz(pt, v1, v2) < 0.0f;
+				b3 = signyz(pt, v2, v0) < 0.0f;
+
+				return ((b1 == b2) && (b2 == b3));
+			
+			}
 		private:
 			void calculateNormal(){
 				Vec3 e0 = v1 - v0;
 				Vec3 e1 = v2 - v0;
 				normal = crossProduct(e0, e1);
 				normal = normal.normalize();
+			}
+			
+			float sign(const Vec3 &p1, const Vec3 &p2, const Vec3 &p3){
+				return (p1.x - p3.x) * (p2.z - p3.z) - (p2.x - p3.x) * (p1.z - p3.z);
+			}
+			
+			float signxy(const Vec3 &p1, const Vec3 &p2, const Vec3 &p3){
+				return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+			}
+			
+			float signyz(const Vec3 &p1, const Vec3 &p2, const Vec3 &p3){
+				return (p1.y - p3.y) * (p2.z - p3.z) - (p2.y - p3.y) * (p1.z - p3.z);
 			}
 	};
 	
@@ -255,7 +328,8 @@ namespace{
 		public:
 			Vec3 linear;
 			float angular;
-		SteeringOutput(void): linear(),angular(0.0f) {}
+			bool completed;
+		SteeringOutput(void): linear(),angular(0.0f),completed(false) {}
 		SteeringOutput(const Vec3& v, float a): linear(v),angular(a) {}
 	};
 
@@ -676,10 +750,27 @@ namespace{
 				character.lastPathPoint = targetParam;
 				OpenSteer::drawLine(character.position, targetParam, gRed);		
 				
-				//SteeringArrive::getSteering(seekTarget, character, steering);
 				SteeringSeek::getSteering(seekTarget, character, steering);
 				character.setBehaviourName("STEERINGFOLLOWPATH");
+			}
+			
+			static void getPathSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering, Path &path){
+				Vec3 futurePos = character.position + character.velocity * predictTime;
+				Vec3 currentParam;
+				int segment = 0;
+				path.getClosestPoint(futurePos, currentParam, segment);
 				
+				Vec3 targetParam;
+				path.getPosition(currentParam, segment, pathOffset, targetParam);
+				
+				Kinematic seekTarget;
+				seekTarget.position = targetParam;
+				
+				character.lastPathPoint = targetParam;
+				OpenSteer::drawLine(character.position, targetParam, gRed);		
+				
+				SteeringSeek::getSteering(seekTarget, character, steering);
+				character.setBehaviourName("STEERINGPATH");
 			}
 	};
 	
@@ -989,6 +1080,7 @@ namespace{
 		copy(n.adyacents.begin(), n.adyacents.end(), std::ostream_iterator<Connection>(o, " "));
 		return o << std::endl;
 	}
+	bool notClipped(Polygon &p1, Polygon &p2);
 	
 	class Graph{
 		public:
@@ -1011,7 +1103,8 @@ namespace{
 				p.getCenter(position);
 				Node n (node_id, position);
 				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end();++it){
-					if((*it).p.isConnected(p)){
+					if((*it).p.isConnected(p) && notClipped((*it).p, p)){
+					//if((*it).p.isConnected(p)){
 						cost = ((*it).position - position).length();
 						(*it).addConnection(node_id, cost);
 						n.addConnection((*it).id, cost);
@@ -1046,7 +1139,6 @@ namespace{
 			void draw(){
 				for(std::vector<Node>::iterator n = nodes.begin();n != nodes.end();++n){
 					Vec3 p1 = (*n).position;
-					//drawCircleOrDisk (0.25, Vec3 (0.0f,1.0f,0.0f), p1, gOrange, 30, true, true);
 					(*n).p.drawMesh();
 					std::ostringstream node_id;
 					node_id << (*n).id << std::endl;
@@ -1065,6 +1157,16 @@ namespace{
 					}
 				}
 			}
+			
+			int nodeIndex(const Vec3 &pt){
+				int n = nodes.size();
+				for(int i = 0; i < n; i++){
+					if(nodes[i].p.insidePolygon(pt)){
+						return i;
+					}
+				}
+				return -1;
+			}
 	};
 	
 	inline std::ostream& operator<< (std::ostream& o, const Graph& s){
@@ -1075,73 +1177,6 @@ namespace{
 	Graph g;
 	
 	void initGraph(){
-		/*
-		Vec3 p1 (0.0f, 0.0f, 0.0f);
-		Vec3 p2 (5.0f, 0.0f, 0.0f);
-		Vec3 p3 (10.0f, 0.0f, 5.0f);
-		Vec3 p4 (13.0f, 0.0f, 10.0f);
-		int n0 = g.addNode(p1);
-		int n1 = g.addNode(p2);
-		int n2 = g.addNode(p3);
-		int n3 = g.addNode(p4);
-		
-		std::cout << "NODES ADDED: " << std::endl << g << std::endl;
-		g.addConnection(n0, n1, (p0 - p1).length());
-		g.addConnection(n0, n2, (p0 - p2).length());
-		g.addConnection(n1, n2, (p1 - p2).length());
-		g.addConnection(n2, n3, (p2 - p3).length());
-		g.addConnection(n1, n3, (p1 - p3).length());
-		std::cout << g << std::endl;
-		*/
-		/*
-		Vec3 p0 (0.0f, 0.0f, 0.0f);
-		Vec3 p1 (5.0f, 0.0f, 0.0f);
-		Vec3 p2 (10.0f, 0.0f, 0.0f);
-		Vec3 p3 (2.0f, 0.0f, 5.0f);
-		Vec3 p4 (6.0f, 0.0f, 5.0f);
-		Vec3 p5 (5.0f, 0.0f, 10.0f);
-		Vec3 p6 (10.0f, 0.0f, 10.0f);
-		
-		int n0 = g.addNode(p0);
-		int n1 = g.addNode(p1);
-		int n2 = g.addNode(p2);
-		int n3 = g.addNode(p3);
-		int n4 = g.addNode(p4);
-		int n5 = g.addNode(p5);
-		int n6 = g.addNode(p6);
-		
-		g.addConnection(n0, n1, (p0 - p1).length());
-		g.addConnection(n1, n2, (p1 - p2).length());
-		g.addConnection(n0, n3, (p0 - p3).length());
-		g.addConnection(n1, n4, (p1 - p4).length());
-		g.addConnection(n3, n4, (p3 - p4).length());
-		g.addConnection(n3, n5, (p3 - p5).length());
-		g.addConnection(n4, n6, (p4 - p6).length());
-		Vec3 p0 (0.0f, 0.0f, 0.0f);
-		Vec3 p1 (5.0f, 0.0f, -2.0f);
-		Vec3 p2 (10.0f, 0.0f, -5.0f);
-		Vec3 p3 (2.0f, 0.0f, 10.0f);
-		Vec3 p4 (5.0f, 0.0f, 5.0f);
-		Vec3 p5 (10.0f, 0.0f, 0.0f);
-		Vec3 p6 (10.0f, 0.0f, 10.0f);
-		
-		int n0 = g.addNode(p0);
-		int n1 = g.addNode(p1);
-		int n2 = g.addNode(p2);
-		int n3 = g.addNode(p3);
-		int n4 = g.addNode(p4);
-		int n5 = g.addNode(p5);
-		int n6 = g.addNode(p6);
-		
-		g.addConnection(n0, n1, (p0 - p1).length());
-		g.addConnection(n1, n2, (p1 - p2).length());
-		g.addConnection(n0, n3, (p0 - p3).length());
-		g.addConnection(n0, n4, (p0 - p4).length() + 10.0f);
-		g.addConnection(n1, n5, (p1 - p5).length());
-		g.addConnection(n3, n4, (p3 - p4).length());
-		g.addConnection(n4, n6, (p4 - p6).length());
-		g.addConnection(n5, n6, (p5 - p6).length() + 5.0f);
-		*/
 		std::vector< Vec3 > vertex;
 		std::vector< tuple<int> > triangles;
 		loadObj(MESH_FILE, vertex, triangles);
@@ -1151,7 +1186,6 @@ namespace{
 			g.addPolygon(p);
 		}
 	}
-	
 	
 	void endGraph(){
 		g.clear();
@@ -1398,6 +1432,123 @@ namespace{
 			}
 	};
 
+	// for patrol
+	
+	class Patrol{
+		public:
+			static Path path;
+			static void getSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering){
+				if(path.isNearEnd(character.position))
+					path.reverse();
+				
+				SteeringOutput localSteering;
+				SteeringLookWhereYoureGoing::getSteering(target, character, localSteering);
+				steering.linear = localSteering.linear;
+				steering.angular = localSteering.angular;
+				SteeringFollowPath::getPathSteering(target, character, localSteering, path);
+				steering.linear += localSteering.linear;
+				steering.angular += localSteering.angular;
+				if(steering.linear.length() > character.maxAcceleration){
+					steering.linear = steering.linear.normalize();
+					steering.linear *= character.maxAcceleration;
+				}
+				if(steering.angular > character.maxRotation)
+					steering.angular = character.maxRotation;
+				
+				character.setBehaviourName("PATROL");
+			}
+	};
+	
+	static Path Patrol::path;
+	
+	void initComputerPatrol(){
+		Patrol::path.addPoint(85.0f, 0.0f, 15.0f);
+		Patrol::path.addPoint(85.0f, 0.0f, 35.0f);
+	}
+	
+	void clearComputerPatrol(){
+		Patrol::path.clearPath();
+	}
+	
+	class GoToPlayerFlag{
+		public:
+			static Path path;
+			static void getSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering){
+				SteeringOutput localSteering;
+				if(path.size() == 0){
+					int initNode = g.nodeIndex(character.position);
+					int endNode = g.nodeIndex(playerStartPosition);
+					std::cout << initNode << ", " << endNode << std::endl;
+					if(initNode != -1 && endNode != -1){
+						PathFinding::pathFindAStar(g, g.nodes[initNode], g.nodes[endNode], GoToPlayerFlag::path);
+					}
+					GoToPlayerFlag::path.addPoint(playerStartPosition);
+				}
+				if(path.isNearEnd(character.position)){
+					GoToPlayerFlag::path.clearPath();
+					steering.completed = true;
+					return;
+				}
+				path.draw();
+				SteeringLookWhereYoureGoing::getSteering(target, character, localSteering);
+				steering.linear = localSteering.linear;
+				steering.angular = localSteering.angular;
+				SteeringFollowPath::getPathSteering(target, character, localSteering, GoToPlayerFlag::path);
+				steering.linear += localSteering.linear;
+				steering.angular += localSteering.angular;
+				if(steering.linear.length() > character.maxAcceleration){
+					steering.linear = steering.linear.normalize();
+					steering.linear *= character.maxAcceleration;
+				}
+				if(steering.angular > character.maxRotation)
+					steering.angular = character.maxRotation;
+				
+				character.setBehaviourName("GOTOPLAYERFLAG");
+			}
+	};
+	
+	Path GoToPlayerFlag::path;
+	
+	class GoToBaseFlag{
+		public:
+			static Path path;
+			static void getSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering){
+				SteeringOutput localSteering;
+				if(path.size() == 0){
+					int initNode = g.nodeIndex(character.position);
+					int endNode = g.nodeIndex(computerStartPosition);
+					std::cout << initNode << ", " << endNode << std::endl;
+					if(initNode != -1 && endNode != -1){
+						PathFinding::pathFindAStar(g, g.nodes[initNode], g.nodes[endNode], GoToBaseFlag::path);
+					}
+					(GoToBaseFlag::path).addPoint(computerStartPosition);
+				}
+				if(path.isNearEnd(character.position)){
+					GoToBaseFlag::path.clearPath();
+					steering.completed = true;
+					std::cout << "ARRIVED" << std::endl;
+					return;
+				}
+				path.draw();
+				SteeringLookWhereYoureGoing::getSteering(target, character, localSteering);
+				steering.linear = localSteering.linear;
+				steering.angular = localSteering.angular;
+				SteeringFollowPath::getPathSteering(target, character, localSteering, GoToBaseFlag::path);
+				steering.linear += localSteering.linear;
+				steering.angular += localSteering.angular;
+				if(steering.linear.length() > character.maxAcceleration){
+					steering.linear = steering.linear.normalize();
+					steering.linear *= character.maxAcceleration;
+				}
+				if(steering.angular > character.maxRotation)
+					steering.angular = character.maxRotation;
+				
+				character.setBehaviourName("GOTOBASEFLAG");
+			}
+	};
+	
+	Path GoToBaseFlag::path;
+	
     // ----------------------------------------------------------------------------
     // This PlugIn uses tree vehicle types: CtfAgent, CtfPlayer and CtfProyectile.  They have a
     // common base class: CtfBase which is a specialization of SimpleVehicle.
@@ -1428,6 +1579,7 @@ namespace{
     class CtfAgent : public CtfBase
     {
 		public:
+			std::vector<void (*)(const Kinematic& , Kinematic& , SteeringOutput&)> plan;
 
 		    // constructor
 		    CtfAgent () {reset ();}
@@ -1440,6 +1592,9 @@ namespace{
 	
 			// draw
 		    void draw (void);
+		    
+		    // Calculates a new plan for the agent
+		    void plan_behaviour (void);
     };
 
 	class JumpPoint{
@@ -1514,6 +1669,21 @@ namespace{
 			bool shouldErase();
 	};
 	
+	class Flag{
+		public:
+			Vec3 position;
+			void draw();
+	};
+	
+	void Flag::draw(){
+		Vec3 p2 = position;
+		p2.y += 3.0f;
+		Vec3 p3 = position;
+		p2.y = 1.5f;
+		p3.x += 1.0f;
+		OpenSteer::drawTriangle(position, p2, p3, gBlack);
+	}
+	
     // ----------------------------------------------------------------------------
     // globals
     // (perhaps these should be member variables of a Vehicle or PlugIn class)
@@ -1537,6 +1707,8 @@ namespace{
 
     CtfAgent* ctfAgent;
     CtfPlayer* ctfPlayer;
+    Flag* computerFlag;
+    Flag* playerFlag;
 	
 	std::vector<Polygon> walls;
 
@@ -1558,6 +1730,33 @@ namespace{
 		walls.clear();
 	}
 	
+	// check if the connection between 2 polygons hits a wall
+	bool notClipped(Polygon &p1, Polygon &p2){
+		Vec3 c1,c2;
+		p1.getCenter(c1);
+		p2.getCenter(c2);
+		for(std::vector<Polygon>::iterator it = walls.begin(); it != walls.end();++it){
+			Polygon &p = (*it);
+			if(p.normal.y > 0.1f)
+				continue;
+			Vec3 u = c2 - c1;
+			Vec3 w = c1 - p.v0;
+			
+			float D = p.normal.dot(u);
+			float N = -p.normal.dot(w);
+			if(fabs(D) < FLT_EPSILON)
+				continue;
+			float sI = N/D;
+			if(sI < FLT_EPSILON || sI > 1.0f)
+				continue;
+			Vec3 intersect = c1 + sI * u;
+			if(p.insidePolygonxy(intersect) && p.insidePolygon(intersect) && p.insidePolygonyz(intersect)){
+				std::cout << "c1: " << c1 << ", c2: " << c2 << ", interseccion: " << intersect << ", p.v0: " << p.v0 << ", p.v1: " << p.v1 << ", p.v2: " << p.v2 << std::endl;
+				return false;
+			}
+		}
+		return true;
+	}
     // ----------------------------------------------------------------------------
     // reset state
 
@@ -1679,24 +1878,15 @@ namespace{
     void CtfAgent::update (const float currentTime, const float elapsedTime)
     {
         SteeringOutput s;
-        steerFunc *getSteering = (steerFunc *)steerFunctions[steerFuncNum];
-        if(getSteering == SteeringFollowPath::getSteering){
-        	if(k.path.size() == 0){
-				// Find A* path
-				PathFinding::pathFindAStar(g, g.nodes[INIT_NODE_PATH], g.nodes[END_NODE_PATH], k.path);
-        	}else{
-        		// If arrived then turn back
-        		if((k.lastPathPoint - g.nodes[END_NODE_PATH].position).length() <= SteeringArrive::targetRadius){
-        			int aux = INIT_NODE_PATH;
-        			INIT_NODE_PATH = END_NODE_PATH;
-        			END_NODE_PATH = aux; 
-        			k.path.clearPath();
-        			PathFinding::pathFindAStar(g, g.nodes[INIT_NODE_PATH], g.nodes[END_NODE_PATH], k.path);
-        		}
-        	}
-			k.path.draw();
-        }
-        (*getSteering)(ctfPlayer->k,k,s);
+        if(plan.size()){
+	        plan[0](ctfPlayer->k, k, s);
+	        if(s.completed){
+	        	std::cout << "COMPLETADO PLAN" << std::endl;
+	        	plan.erase(plan.begin());
+	        }
+	    }else{
+		    plan_behaviour();
+	    }
 		k.update(s,elapsedTime);
 		
 		// Fix orientation
@@ -1746,23 +1936,8 @@ namespace{
 
 		    void open (void)
 		    {
-		    	steerFunctions.push_back(SteeringFollowPath::getSteering);
-		    	/*
-		    	steerFunctions.push_back(SteeringArrive::getSteering);
-		    	steerFunctions.push_back(SteeringPriority::getSteering);
-		    	steerFunctions.push_back(SteeringCollisionAvoidance::getSteering);
-		    	steerFunctions.push_back(SteeringSeparation::getSteering);
-		    	steerFunctions.push_back(SteeringPursue::getSteering);
-		    	steerFunctions.push_back(SteeringEvade::getSteering);
-		    	steerFunctions.push_back(SteeringBlended::getSteering);
-		    	steerFunctions.push_back(SteeringWander::getSteering);
-		    	steerFunctions.push_back(SteeringSeek::getSteering);
-		    	steerFunctions.push_back(SteeringFlee::getSteering);
-		    	steerFunctions.push_back(SteeringAlign::getSteering);
-		    	steerFunctions.push_back(SteeringVelocityMatch::getSteering);
-		    	steerFunctions.push_back(SteeringFace::getSteering);
-		    	steerFunctions.push_back(SteeringLookWhereYoureGoing::getSteering);
-		    	*/
+		    
+				loadWorld();
 		    	initPath();
 		    	initGraph();
 		    	
@@ -1771,25 +1946,27 @@ namespace{
 				srand(time(0));
 		        // create the seeker ("hero"/"attacker")
 		        ctfAgent = new CtfAgent;
-		        Vec3 pos1 (1,0,1);
-		        Vec3 pos2 (6,0,6);
-		        pos1 = g.nodes[0].position;
-		        ctfAgent->setPosition(pos1);
-		        ctfAgent->k.setPosition(pos1);
+		        ctfAgent->setPosition(computerStartPosition);
+		        ctfAgent->k.setPosition(computerStartPosition);
 		        all.push_back (ctfAgent);
 				ctfPlayer = new CtfPlayer;
-				ctfPlayer->setPosition(pos2);
-				ctfPlayer->k.setPosition(pos2);
-				ctfPlayer->k.maxSpeed = 3.0f;
+				ctfPlayer->setPosition(playerStartPosition);
+				ctfPlayer->k.setPosition(playerStartPosition);
 				all.push_back (ctfPlayer);
-				loadWorld();
 
+				playerFlag = new Flag;
+				playerFlag->position = playerStartPosition;
+				
+				computerFlag = new Flag;
+				computerFlag->position = computerStartPosition;
+				
 		        // initialize camera
 		        OpenSteerDemo::init2dCamera (*ctfPlayer);
 		        OpenSteerDemo::camera.mode = Camera::cmFixedDistanceOffset;
 		        OpenSteerDemo::camera.fixedTarget.set (15, 0, 0);
 		        OpenSteerDemo::camera.fixedPosition.set (80, 60, 0);
-
+		        
+				initComputerPatrol();
 		    }
 
 		    void update (const float currentTime, const float elapsedTime)
@@ -1805,20 +1982,6 @@ namespace{
 		      	for(std::vector<CtfProyectile *>::iterator it = proyectiles.begin() ; it != proyectiles.end(); ++it)
 					(*it)->update (currentTime, elapsedTime);
 				
-				// Draw path
-				// path.draw();
-				
-				// Draw graph
-				if(drawGraph)
-					g.draw();
-				
-		      	// draw walls
-		      	for(std::vector<Polygon>::iterator it = walls.begin() ; it != walls.end(); ++it)
-					(*it).draw();
-
-				if(path.isNearEnd(ctfAgent->k.position) || path.isNearBeginning(ctfAgent->k.position))
-					SteeringFollowPath::pathOffset *= -1.0f;
-				
 		    }
 
 		    void redraw (const float currentTime, const float elapsedTime)
@@ -1832,21 +1995,21 @@ namespace{
 		        // update camera
 		        OpenSteerDemo::updateCamera (currentTime, elapsedTime, selected);
 
-		        // draw "ground plane" centered between base and selected vehicle
-		        const Vec3 goalOffset = gHomeBaseCenter-OpenSteerDemo::camera.position();
-		        const Vec3 goalDirection = goalOffset.normalize ();
-		        const Vec3 cameraForward = OpenSteerDemo::camera.xxxls().forward();
-		        const float goalDot = cameraForward.dot (goalDirection);
-		        const float blend = remapIntervalClip (goalDot, 1, 0, 0.5, 0);
-		        const Vec3 gridCenter = interpolate (blend,
-		                                             selected.position(),
-		                                             gHomeBaseCenter);
-		        OpenSteerDemo::gridUtility (gridCenter);
+				// Draw graph
+				if(drawGraph)
+					g.draw();
+				
+		      	// draw walls
+		      	for(std::vector<Polygon>::iterator it = walls.begin() ; it != walls.end(); ++it)
+					(*it).draw();
 
 		        // draw the all the objects and home base
 		        ctfAgent->draw();
 
 				ctfPlayer->draw();
+				
+				computerFlag -> draw();
+				playerFlag -> draw();
 				
 				int i,n = proyectiles.size();
 				for(i = 0;i < n;++i){
@@ -1858,9 +2021,6 @@ namespace{
 						proyectiles[i]-> draw();
 					}
 				}
-
-		        // highlight vehicle nearest mouse
-		        OpenSteerDemo::highlightVehicleUtility (nearMouse);
 		    }
 
 		    void close (void)
@@ -1871,6 +2031,12 @@ namespace{
 	
 				delete (ctfPlayer);
 				ctfPlayer = NULL;
+				
+				delete (computerFlag);
+				computerFlag = NULL;
+				
+				delete (playerFlag);
+				playerFlag = NULL;
 				
 				endBlendedBehaviours();
 				endPriorityGroups();
@@ -1885,6 +2051,8 @@ namespace{
 		        
 		        // clear all the world
 		        clearWorld();
+		        
+		        clearComputerPatrol();
 		    }
 
 		    void reset (void)
@@ -1995,5 +2163,106 @@ namespace{
         draw2dTextAt2dLocation (status, screenLocation, gGray80, drawGetWindowWidth(), drawGetWindowHeight());
     }
 
+	// Definitions for planner
+	typedef enum flag_status_t{
+		FLAG_SAFE,
+		FLAG_UNSAFE
+	}flag_status_t;
+	
+	// Operators
+	bool action_patrol(cpphophtn::state &init_state, std::map<std::string, boost::any>& parameters, cpphophtn::state &final_state){
+		final_state = init_state;
+		std::map<std::string, flag_status_t> flags_status = boost::any_cast<std::map<std::string, flag_status_t> >(final_state.variables["flags_status"]);
+		if(flags_status["computer_flag"] == FLAG_UNSAFE)
+			flags_status["computer_flag"] = FLAG_SAFE;
+		return true;
+	}
+	
+	bool action_steal_flag(cpphophtn::state &init_state, std::map<std::string, boost::any>& parameters, cpphophtn::state &final_state){
+		final_state = init_state;
+		std::map<std::string, flag_status_t> flags_status = boost::any_cast<std::map<std::string, flag_status_t> >(final_state.variables["flags_status"]);
+		if(flags_status["player_flag"] == FLAG_SAFE)
+			flags_status["player_flag"] = FLAG_UNSAFE;
+		return true;
+	}
+	
+	// Methods
+	bool method_defend(cpphophtn::state &init_state, std::map<std::string, boost::any>& parameters, std::vector<cpphophtn::task>& tasks){
+		std::map<std::string, flag_status_t> flags_status = boost::any_cast<std::map<std::string, flag_status_t> >(init_state.variables["flags_status"]);
+		if(flags_status["computer_flag"] == FLAG_UNSAFE){
+			cpphophtn::task t;
+			t.name = "patrol";
+			tasks.push_back(t);
+			return true;
+		}
+		return false;
+	}
+	
+	bool method_attack(cpphophtn::state &init_state, std::map<std::string, boost::any>& parameters, std::vector<cpphophtn::task>& tasks){
+		std::map<std::string, flag_status_t> flags_status = boost::any_cast<std::map<std::string, flag_status_t> >(init_state.variables["flags_status"]);
+		if(flags_status["player_flag"] == FLAG_UNSAFE){
+			cpphophtn::task t;
+			t.name = "steal_flag";
+			tasks.push_back(t);
+			return true;
+		}
+		return false;
+	}
+	
+	void CtfAgent::plan_behaviour (void){
+		std::cout << "PLANIFICANDO" << std::endl;
+		cpphophtn::state s;
+		std::vector<cpphophtn::task> plan_str;
+		cpphophtn::htn_operator w;
+		s.name = "worldstate";
+	
+		std::map<std::string, flag_status_t> flags_status;
+		flags_status["computer_flag"] = (ctfPlayer->k.position - computerStartPosition).length() < SAFE_DISTANCE ? FLAG_UNSAFE : FLAG_SAFE;
+		flags_status["player_flag"] = (ctfPlayer->k.position - playerStartPosition).length() > SAFE_DISTANCE ? FLAG_UNSAFE : FLAG_SAFE;
+		s.variables["flags_status"] = flags_status;
+		
+		cpphophtn::cpphop htn;
+		w.name = "patrol";
+		w.action = action_patrol;
+		htn.declare_operator("patrol", w);
+		
+		w.name = "steal_flag";
+		w.action = action_steal_flag;
+		htn.declare_operator("steal_flag", w);
+		
+		cpphophtn::method m;
+		std::vector<cpphophtn::method> mtds;
+		m.name = "defend";
+		m.method_exe = method_defend;
+		mtds.push_back(m);
+		m.name = "attack";
+		m.method_exe = method_attack;
+		mtds.push_back(m);
+		htn.declare_methods("behave",  mtds);
+	
+		std::vector<cpphophtn::task> tasks;
+		cpphophtn::task t;
+	
+		t.name = "behave";
+		tasks.push_back(t);
+		
+		htn.plan(s, tasks, plan_str, 3);
+		std::cout << "***PLAN: " << plan_str << std::endl;
+		
+		if(plan_str.size() == 0){
+			plan.push_back(GoToBaseFlag::getSteering);
+		}else{
+			for(std::vector<cpphophtn::task>::iterator it = plan_str.begin(); it != plan_str.end(); it++){
+				if((*it).name == "patrol"){
+					plan.push_back(GoToBaseFlag::getSteering);
+					plan.push_back(Patrol::getSteering);
+				}else if((*it).name == "steal_flag"){
+					plan.push_back(GoToPlayerFlag::getSteering);
+					plan.push_back(GoToBaseFlag::getSteering);
+				}
+			}
+			plan_str.clear();
+		}
+	}
 } // anonymous namespace
 
