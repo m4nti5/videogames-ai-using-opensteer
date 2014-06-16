@@ -20,6 +20,7 @@
 #include "OpenSteer/OpenSteerDemo.h"
 #include "OpenSteer/Color.h"
 #include "OpenSteer/cpphop.hpp"
+#include "OpenSteer/VantagePoints.h"
 
 #define WORLD_FILE	"../files/world2.obj"
 #define MESH_FILE	"../files/mesh2.obj"
@@ -968,8 +969,43 @@ namespace{
 			tuple (T f, T s, T t):first(f), second(s), third(t){}
 			tuple(){}
 	};
-
-	bool loadObj(const char* path, std::vector< Vec3 >& vertex, std::vector< tuple<int> >& triangles){
+	
+	bool loadMap(const char* path, std::vector< Vec3 >& vertex, std::vector< tuple<int> >& triangles, VantagePoints &vpoints){
+		std::ifstream file;
+		std::string line;
+		int tn = 0;
+		char op, newline;
+		tuple <int> t;
+		Vec3 v;
+		file.open(path, std::ios::in);
+		if(!file.is_open())
+			return false;
+		while(file >> op){
+			switch(op){
+				case 'v':
+					file >> std::setprecision(6) >> std::fixed >> v.x >> v.y >> v.z;
+					vertex.push_back(v);
+					break;
+				case 'f':
+					file >> t.first >> t.second >> t.third;
+					triangles.push_back(t);
+					break;
+				case 'h':
+					file >> std::setprecision(6) >> std::fixed >> v.x >> v.y >> v.z;
+					vpoints.add(v);
+					break;
+				case '\n':
+					break;
+				default:
+					getline(file, line);
+					break;
+			}
+		}
+		file.close();
+		return false;
+	}
+	
+	bool loadMesh(const char* path, std::vector< Vec3 >& vertex, std::vector< tuple<int> >& triangles){
 		std::ifstream file;
 		std::string line;
 		int tn = 0;
@@ -1179,7 +1215,8 @@ namespace{
 	void initGraph(){
 		std::vector< Vec3 > vertex;
 		std::vector< tuple<int> > triangles;
-		loadObj(MESH_FILE, vertex, triangles);
+		VantagePoints v;
+		loadMesh(MESH_FILE, vertex, triangles, v);
 		std::cout << "Cargado los meshes, " << triangles.size() << " poligonos!!!" << std::endl;
 		for(std::vector< tuple<int> >::iterator it = triangles.begin(); it != triangles.end(); ++it){
 			Polygon p(vertex[(*it).first - 1], vertex[(*it).second - 1], vertex[(*it).third - 1]);
@@ -1711,13 +1748,15 @@ namespace{
     Flag* playerFlag;
 	
 	std::vector<Polygon> walls;
+	
+	VantagePoints vantage_points;
 
 	// loadWorld
 	
 	void loadWorld(){
 		std::vector< Vec3 > vertex;
 		std::vector< tuple<int> > triangles;
-		loadObj(WORLD_FILE, vertex, triangles);
+		loadMap(WORLD_FILE, vertex, triangles, vantage_points);
 		std::cout << "Cargado el mundo, " << triangles.size() << " poligonos!!!" << std::endl;
 		for(std::vector< tuple<int> >::iterator it = triangles.begin(); it != triangles.end(); ++it){
 			Polygon p(vertex[(*it).first - 1], vertex[(*it).second - 1], vertex[(*it).third - 1]);
@@ -2010,6 +2049,8 @@ namespace{
 				
 				computerFlag -> draw();
 				playerFlag -> draw();
+				
+				vantage_points.draw();
 				
 				int i,n = proyectiles.size();
 				for(i = 0;i < n;++i){
