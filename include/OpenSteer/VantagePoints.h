@@ -19,5 +19,16 @@ class VantagePoints{
 			    drawXZCircle (0.3, *it, OpenSteer::gBlue, 10);
             }
 		}
+		
+		OpenSteer::Vec3 getClosest(const OpenSteer::Vec3 &src){
+			OpenSteer::Vec3 closest = vpoints[0];
+			for(std::vector<OpenSteer::Vec3>::iterator it = vpoints.begin() + 1; it != vpoints.end();++it){
+				float dist = (src - (*it)).length();
+				if(dist < (src - closest).length()){
+					closest = *it;
+				}
+            }
+            return closest;
+		}
 };
 
