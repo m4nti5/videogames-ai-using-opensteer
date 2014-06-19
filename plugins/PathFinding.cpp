@@ -29,7 +29,7 @@
 
 #define WORLD_FILE	"../files/world2.obj"
 #define MESH_FILE	"../files/mesh2.obj"
-#define INITIAL_AGENT_STATUS 10.0f
+#define INITIAL_AGENT_STATUS 100.0f
 #define PLANTHRESHOLD 3
 
 namespace{
@@ -39,9 +39,8 @@ namespace{
     // Update for proyectiles!
         
     const Vec3 GRAVITY (0, -9.81, 0);
-    //const Vec3 playerStartPosition (10.0, 0.0, 25.0);
-    const Vec3 playerStartPosition (90.0, 0.0, 25.0);
-    const Vec3 computerStartPosition (90.0, 0.0, 25.0);
+    const Vec3 playerFlagPosition (10.0, 0.0, 25.0);
+    const Vec3 computerFlagPosition (90.0, 0.0, 25.0);
 
 	// Used for behaviours changes with F1/F2
 	typedef  void *steerFunc(const Kinematic& , Kinematic& , SteeringOutput&);
@@ -1108,12 +1107,12 @@ namespace{
 				SteeringOutput localSteering;
 				if(path.size() == 0){
 					int initNode = g.nodeIndex(character.position);
-					int endNode = g.nodeIndex(playerStartPosition);
+					int endNode = g.nodeIndex(playerFlagPosition);
 					std::cout << initNode << ", " << endNode << std::endl;
 					if(initNode != -1 && endNode != -1){
 						CustomPathFinding::pathFindAStar(g, g.nodes[initNode], g.nodes[endNode], GoToPlayerFlag::path);
 					}
-					GoToPlayerFlag::path.addPoint(playerStartPosition);
+					GoToPlayerFlag::path.addPoint(playerFlagPosition);
 				}
 				if(path.isNearEnd(character.position)){
 					GoToPlayerFlag::path.clearCustomPath();
@@ -1147,12 +1146,12 @@ namespace{
 				SteeringOutput localSteering;
 				if(path.size() == 0){
 					int initNode = g.nodeIndex(character.position);
-					int endNode = g.nodeIndex(computerStartPosition);
+					int endNode = g.nodeIndex(computerFlagPosition);
 					std::cout << initNode << ", " << endNode << std::endl;
 					if(initNode != -1 && endNode != -1){
 						CustomPathFinding::pathFindAStar(g, g.nodes[initNode], g.nodes[endNode], GoToBaseFlag::path);
 					}
-					(GoToBaseFlag::path).addPoint(computerStartPosition);
+					(GoToBaseFlag::path).addPoint(computerFlagPosition);
 				}
 				if(path.isNearEnd(character.position)){
 					GoToBaseFlag::path.clearCustomPath();
@@ -1639,19 +1638,19 @@ namespace{
 				srand(time(0));
 		        // create the seeker ("hero"/"attacker")
 		        ctfAgent = new CtfAgent;
-		        ctfAgent->setPosition(computerStartPosition);
-		        ctfAgent->k.setPosition(computerStartPosition);
+		        ctfAgent->setPosition(computerFlagPosition);
+		        ctfAgent->k.setPosition(computerFlagPosition);
 		        all.push_back (ctfAgent);
 				ctfPlayer = new CtfPlayer;
-				ctfPlayer->setPosition(playerStartPosition);
-				ctfPlayer->k.setPosition(playerStartPosition);
+				ctfPlayer->setPosition(computerFlagPosition);
+				ctfPlayer->k.setPosition(computerFlagPosition);
 				all.push_back (ctfPlayer);
 
 				playerFlag = new Flag;
-				playerFlag->position = playerStartPosition;
+				playerFlag->position = playerFlagPosition;
 				
 				computerFlag = new Flag;
-				computerFlag->position = computerStartPosition;
+				computerFlag->position = computerFlagPosition;
 				
 		        // initialize camera
 		        OpenSteerDemo::init2dCamera (*ctfPlayer);
@@ -1931,8 +1930,8 @@ namespace{
 		s.name = "worldstate";
 	
 		std::map<std::string, flag_status_t> flags_status;
-		flags_status["computer_flag"] = (ctfPlayer->k.position - computerStartPosition).length() < SAFE_DISTANCE ? FLAG_UNSAFE : FLAG_SAFE;
-		flags_status["player_flag"] = (ctfPlayer->k.position - playerStartPosition).length() > SAFE_DISTANCE ? FLAG_UNSAFE : FLAG_SAFE;
+		flags_status["computer_flag"] = (ctfPlayer->k.position - computerFlagPosition).length() < SAFE_DISTANCE ? FLAG_UNSAFE : FLAG_SAFE;
+		flags_status["player_flag"] = (ctfPlayer->k.position - playerFlagPosition).length() > SAFE_DISTANCE ? FLAG_UNSAFE : FLAG_SAFE;
 		s.variables["flags_status"] = flags_status;
 		
 		agent_status_t agent_status = hp < 40.0f ? AGENT_HURT : AGENT_HEALTHY;

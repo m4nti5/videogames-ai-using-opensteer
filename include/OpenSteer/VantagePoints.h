@@ -7,6 +7,7 @@ class VantagePoints{
 		VantagePoints(){}
 		
 		void add(const OpenSteer::Vec3 &v){
+			std::cout << "Agregando punto de ventaja " << v << std::endl;
 			vpoints.push_back(v);
 		}
 		
