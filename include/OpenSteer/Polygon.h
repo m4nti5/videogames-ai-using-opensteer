@@ -1,9 +1,10 @@
 #ifndef POLYGON_H
 #define POLYGON_H
-	#include "Color.h"
-	#include "Vec3.h"
-	#include "Draw.h"
-	// Represents a polygon in the game
+#include "Color.h"
+#include "Vec3.h"
+#include "Draw.h"
+// Represents a polygon in the game
+namespace OpenSteer{
 	class Polygon{
 		public:
 			OpenSteer::Vec3 v0, v1, v2, normal;
@@ -135,5 +136,9 @@
 				return (p1.y - p3.y) * (p2.z - p3.z) - (p2.y - p3.y) * (p1.z - p3.z);
 			}
 	};
+	
+	// check if the connection between 2 polygons hits a wall
+	bool notClipped(std::vector<Polygon>& walls,Polygon &p1, Polygon &p2);
+}
 #endif
 

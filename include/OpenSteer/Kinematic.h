@@ -9,6 +9,7 @@
 	#include "SteeringOutput.h"
 	#include "Draw.h"
 	#include "OpenSteerDemo.h"
+	#include "Graph.h"
 	
 	namespace OpenSteer {
 		// Handles the phisics information
@@ -44,6 +45,7 @@
 				// For FollowPath Steering
 				CustomPath path;
 				Vec3 lastCustomPathPoint;
+				Graph g;
 		
 				static const Kinematic zero;
 		
@@ -119,9 +121,10 @@
 					return d;
 				}
 		};
-	inline std::ostream& operator<< (std::ostream& o, const Kinematic& k){
-		return o << "position: " << k.position << std::endl << "orientation: " << k.orientation << std::endl << "velocity: " << k.velocity << std::endl << "rotation: " << k.rotation << std::endl;
-	}
+		
+		inline std::ostream& operator<< (std::ostream& o, const Kinematic& k){
+			return o << "position: " << k.position << std::endl << "orientation: " << k.orientation << std::endl << "velocity: " << k.velocity << std::endl << "rotation: " << k.rotation << std::endl;
+		}
 	}
 	
 	

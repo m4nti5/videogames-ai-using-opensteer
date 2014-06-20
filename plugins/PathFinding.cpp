@@ -30,6 +30,9 @@
 #define WORLD_FILE	"../files/world2.obj"
 #define MESH_FILE	"../files/mesh2.obj"
 #define INITIAL_AGENT_STATUS 100.0f
+#define INITIAL_PLAYER_STATUS 100.0f
+#define DAMAGE_RADIUS 5.0f
+#define PROYECTILE_DAMAGE 20.0f
 #define PLANTHRESHOLD 3
 
 namespace{
@@ -629,197 +632,6 @@ namespace{
 		file.close();
 		return false;
 	}
-	
-	// Connection class (to connect nodes)
-	class Connection{
-		public:
-			int toNode;
-			int fromNode;
-			float cost;
-			static const Connection None;
-		
-			Connection(int from, int to,float cost){
-				fromNode = from;
-				toNode = to;
-				this->cost = cost;
-			}
-		
-			int getToNode(){
-				return toNode;
-			}
-		
-			float getCost(){
-				return cost;
-			}
-
-			Connection operator= (const Connection& c) {
-				this->toNode = c.toNode,this->fromNode = c.fromNode,this->cost=c.cost;
-				return *this;
-			}
-			
-			bool operator== (const Connection& n) const {return this->toNode == n.toNode && this->fromNode == n.fromNode && this->cost == n.cost;}
-	};
-	
-	const Connection Connection::None (-1,-1,0.0f);
-	class Node{
-		public:
-			int id;
-			Polygon p;
-			std::vector<Connection> adyacents;
-			Vec3 position;
-			static const Node None;
-			
-			Node(void): position(Vec3::zero){}
-			
-			~Node(){
-				adyacents.clear();
-			}
-			
-			Node(int id, const Vec3& position){
-				this->position = position;
-				this->id = id;
-			}
-			
-			void addConnection(int b, float cost){
-				Connection c (this->id, b, cost);
-				adyacents.push_back(c);
-			}
-			
-			inline Node operator= (const Node& n) {
-				this->position = n.position;
-				this->id = n.id;
-				this->adyacents = n.adyacents;
-				this->p = n.p;
-				return *this;
-			}
-					
-			inline bool operator== (const Node& n) const {return this->id == n.id;}
-			
-			inline bool operator!= (const Node& n) const {return (!(*this == n));}
-	
-	};
-	
-	const Node Node::None (0,Vec3::zero);
-	
-	inline std::ostream& operator<< (std::ostream& o, const Connection& c){
-		return o << c.toNode << "(" << c.cost << ")";
-	}
-	
-	inline std::ostream& operator<< (std::ostream& o, const Node& n){
-		o << n.id << "(" << n.adyacents.size() << ")" << ": ";
-		copy(n.adyacents.begin(), n.adyacents.end(), std::ostream_iterator<Connection>(o, " "));
-		return o << std::endl;
-	}
-	bool notClipped(Polygon &p1, Polygon &p2);
-	
-	class Graph{
-		public:
-			std::vector<Node> nodes;
-			int lastid;
-			
-			Graph(void){lastid = 0;}
-			
-			int addNode(const Vec3& position){
-				int node_id = lastid++;
-				Node n (node_id, position);
-				nodes.push_back(n);
-				return node_id;
-			}
-			
-			void addPolygon(Polygon& p){
-				int node_id = lastid++;
-				float cost;
-				Vec3 position;
-				p.getCenter(position);
-				Node n (node_id, position);
-				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end();++it){
-					if((*it).p.isConnected(p) && notClipped((*it).p, p)){
-					//if((*it).p.isConnected(p)){
-						cost = ((*it).position - position).length();
-						(*it).addConnection(node_id, cost);
-						n.addConnection((*it).id, cost);
-					}
-				}
-				n.p = p;
-				nodes.push_back(n);
-			}
-			
-			void addConnection(int a, int b, float cost){
-				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end();++it){
-					if((*it).id == a)
-						(*it).addConnection(b, cost);
-				}
-			}
-			
-			void getConnections(const Node &node, std::vector<Connection>& connections){
-				for(std::vector<Node>::iterator it = nodes.begin(); it != nodes.end(); ++it){
-					if(*it == node){
-						for(std::vector<Connection>::iterator c_it = (*it).adyacents.begin(); c_it != (*it).adyacents.end(); ++c_it){
-							connections.push_back(*c_it);
-						}
-						break;
-					}
-				}
-			}
-			
-			void clear(){
-				nodes.clear();
-			}
-			
-			void draw(){
-				for(std::vector<Node>::iterator n = nodes.begin();n != nodes.end();++n){
-					Vec3 p1 = (*n).position;
-					(*n).p.drawMesh();
-					std::ostringstream node_id;
-					node_id << (*n).id << std::endl;
-					draw2dTextAt3dLocation (node_id, p1, gWhite, drawGetWindowWidth(), drawGetWindowHeight());
-
-					for(std::vector<Connection>::iterator c = (*n).adyacents.begin(); c!= (*n).adyacents.end();++c){
-						Vec3 p2 = nodes[(*c).toNode].position;
-						OpenSteer::drawLine(p1, p2, gRed);
-						
-						Vec3 tpos = p2 - p1;
-						float l = tpos.length();
-						const Vec3 textOrigin = p1 + tpos.normalize() * l/2 + Vec3 (0, 0.25, 0);
-						std::ostringstream annote;
-						annote << (*c).cost << std::endl;
-						draw2dTextAt3dLocation (annote, textOrigin, gOrange, drawGetWindowWidth(), drawGetWindowHeight());
-					}
-				}
-			}
-			
-			int nodeIndex(const Vec3 &pt){
-				int n = nodes.size();
-				for(int i = 0; i < n; i++){
-					if(nodes[i].p.insidePolygon(pt)){
-						return i;
-					}
-				}
-				return -1;
-			}
-	};
-	
-	inline std::ostream& operator<< (std::ostream& o, const Graph& s){
-		copy(s.nodes.begin(), s.nodes.end(), std::ostream_iterator<Node>(o, ""));
-		return o;
-	}
-	
-	Graph g;
-	
-	void initGraph(){
-		std::vector< Vec3 > vertex;
-		std::vector< tuple<int> > triangles;
-		loadMesh(MESH_FILE, vertex, triangles);
-		std::cout << "Cargado los meshes, " << triangles.size() << " poligonos!!!" << std::endl;
-		for(std::vector< tuple<int> >::iterator it = triangles.begin(); it != triangles.end(); ++it){
-			Polygon p(vertex[(*it).first - 1], vertex[(*it).second - 1], vertex[(*it).third - 1]);
-			g.addPolygon(p);
-		}
-	}
-	
-	void endGraph(){
-		g.clear();
-	}
 
 	class NodeRecord{
 		public:
@@ -1106,11 +918,11 @@ namespace{
 			static void getSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering){
 				SteeringOutput localSteering;
 				if(path.size() == 0){
-					int initNode = g.nodeIndex(character.position);
-					int endNode = g.nodeIndex(playerFlagPosition);
+					int initNode = character.g.nodeIndex(character.position);
+					int endNode = character.g.nodeIndex(playerFlagPosition);
 					std::cout << initNode << ", " << endNode << std::endl;
 					if(initNode != -1 && endNode != -1){
-						CustomPathFinding::pathFindAStar(g, g.nodes[initNode], g.nodes[endNode], GoToPlayerFlag::path);
+						CustomPathFinding::pathFindAStar(character.g, character.g.nodes[initNode], character.g.nodes[endNode], GoToPlayerFlag::path);
 					}
 					GoToPlayerFlag::path.addPoint(playerFlagPosition);
 				}
@@ -1145,11 +957,11 @@ namespace{
 			static void getSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering){
 				SteeringOutput localSteering;
 				if(path.size() == 0){
-					int initNode = g.nodeIndex(character.position);
-					int endNode = g.nodeIndex(computerFlagPosition);
+					int initNode = character.g.nodeIndex(character.position);
+					int endNode = character.g.nodeIndex(computerFlagPosition);
 					std::cout << initNode << ", " << endNode << std::endl;
 					if(initNode != -1 && endNode != -1){
-						CustomPathFinding::pathFindAStar(g, g.nodes[initNode], g.nodes[endNode], GoToBaseFlag::path);
+						CustomPathFinding::pathFindAStar(character.g, character.g.nodes[initNode], character.g.nodes[endNode], GoToBaseFlag::path);
 					}
 					(GoToBaseFlag::path).addPoint(computerFlagPosition);
 				}
@@ -1189,10 +1001,10 @@ namespace{
 				SteeringOutput localSteering;
 				if(path.size() == 0){
 					Vec3 destination = vantage_points.getClosest(character.position);
-					int initNode = g.nodeIndex(character.position);
-					int endNode = g.nodeIndex(destination);
+					int initNode = character.g.nodeIndex(character.position);
+					int endNode = character.g.nodeIndex(destination);
 					if(initNode != -1 && endNode != -1){
-						CustomPathFinding::pathFindAStar(g, g.nodes[initNode], g.nodes[endNode], Camp::path);
+						CustomPathFinding::pathFindAStar(character.g, character.g.nodes[initNode], character.g.nodes[endNode], Camp::path);
 						std::cout << initNode << ", " << endNode << ", path: " << path << std::endl;
 					}
 					(Camp::path).addPoint(destination);
@@ -1243,6 +1055,7 @@ namespace{
     class CtfBase : public SimpleVehicle
     {
 		public:
+			float hp;
 			
 		    // constructor
 		    CtfBase () {reset ();}
@@ -1254,6 +1067,9 @@ namespace{
 		    void draw (void);
 
 		    void randomizeStartingPositionAndHeading (void);
+			
+			// Permits overwrite per vehicle to show damage in vehicle
+			void damageReceived(float damage);
 		     
 		    // for draw method
 		    Color bodyColor;
@@ -1266,11 +1082,13 @@ namespace{
     {
 		public:
 			std::vector<void (*)(const Kinematic& , Kinematic& , SteeringOutput&)> plan;
-			float hp = INITIAL_AGENT_STATUS;
+			std::vector<cpphophtn::task> current_plan;
 			time_t lastPlan;
+			Graph g;
+			float hp;
 			
 		    // constructor
-		    CtfAgent () {reset ();}
+		    CtfAgent (): hp(INITIAL_AGENT_STATUS){reset ();}
 
 		    // reset state
 		    void reset (void);
@@ -1283,6 +1101,8 @@ namespace{
 		    
 		    // Calculates a new plan for the agent
 		    void plan_behaviour (void);
+		    
+		    void damageReceived(float damage);
     };
 
 	class JumpPoint{
@@ -1297,9 +1117,10 @@ namespace{
     class CtfPlayer : public CtfBase
     {
 		public:
-
+			float hp;
+			
 		    // constructor
-		    CtfPlayer () {reset ();}
+		    CtfPlayer (): hp(INITIAL_PLAYER_STATUS) {reset ();}
 
 		    // reset state
 		    void reset (void);
@@ -1315,6 +1136,8 @@ namespace{
 		    
 		    // Holds information of the jump
 		    JumpPoint jpoint;
+		    
+		    void damageReceived(float damage);
 		    
     };
 
@@ -1400,7 +1223,23 @@ namespace{
 	
 	std::vector<Polygon> walls;
 	
-
+	Graph g;
+	
+	void initGraph(){
+		std::vector< Vec3 > vertex;
+		std::vector< tuple<int> > triangles;
+		loadMesh(MESH_FILE, vertex, triangles);
+		std::cout << "Cargado los meshes, " << triangles.size() << " poligonos!!!" << std::endl;
+		for(std::vector< tuple<int> >::iterator it = triangles.begin(); it != triangles.end(); ++it){
+			Polygon p(vertex[(*it).first - 1], vertex[(*it).second - 1], vertex[(*it).third - 1]);
+			g.addPolygon(walls, p);
+		}
+	}
+	
+	void endGraph(){
+		g.clear();
+	}
+	
 	// loadWorld
 	
 	void loadWorld(){
@@ -1417,34 +1256,6 @@ namespace{
 	// clear world
 	void clearWorld(){
 		walls.clear();
-	}
-	
-	// check if the connection between 2 polygons hits a wall
-	bool notClipped(Polygon &p1, Polygon &p2){
-		Vec3 c1,c2;
-		p1.getCenter(c1);
-		p2.getCenter(c2);
-		for(std::vector<Polygon>::iterator it = walls.begin(); it != walls.end();++it){
-			Polygon &p = (*it);
-			if(p.normal.y > 0.1f)
-				continue;
-			Vec3 u = c2 - c1;
-			Vec3 w = c1 - p.v0;
-			
-			float D = p.normal.dot(u);
-			float N = -p.normal.dot(w);
-			if(fabs(D) < FLT_EPSILON)
-				continue;
-			float sI = N/D;
-			if(sI < FLT_EPSILON || sI > 1.0f)
-				continue;
-			Vec3 intersect = c1 + sI * u;
-			if(p.insidePolygonxy(intersect) && p.insidePolygon(intersect) && p.insidePolygonyz(intersect)){
-				std::cout << "c1: " << c1 << ", c2: " << c2 << ", interseccion: " << intersect << ", p.v0: " << p.v0 << ", p.v1: " << p.v1 << ", p.v2: " << p.v2 << std::endl;
-				return false;
-			}
-		}
-		return true;
 	}
     // ----------------------------------------------------------------------------
     // reset state
@@ -1464,6 +1275,9 @@ namespace{
     {
         CtfBase::reset ();
         bodyColor.set (0.4f, 0.4f, 0.6f); // blueish
+		setPosition(computerFlagPosition);
+		k.setPosition(computerFlagPosition);
+		hp = INITIAL_AGENT_STATUS;
     }
 
 
@@ -1473,6 +1287,9 @@ namespace{
         jump = false;
         jpoint.jumpLocation = Vec3::zero;
         bodyColor.set (0.6f, 0.4f, 0.4f); // redish
+		setPosition(playerFlagPosition);
+		k.setPosition(playerFlagPosition);
+		hp = INITIAL_PLAYER_STATUS;
     }
 
 	void CtfProyectile::reset (void)
@@ -1575,7 +1392,6 @@ namespace{
 	        	plan.erase(plan.begin());
 	        }
 	    }else{
-	    	plan.clear();
 		    plan_behaviour();
 		    lastPlan = t;
 	    }
@@ -1604,10 +1420,48 @@ namespace{
 		recordTrailVertex (currentTime, k.position);
     }
     
+    // damage received!!!
+    
+    void CtfBase::damageReceived(float damage){
+    	std::cout << "Base called!!!" << std::endl;
+    
+    }
+    
+	void CtfAgent::damageReceived(float damage){
+		CtfBase::damageReceived(damage);
+		hp -= damage;
+		std::cout << "damage: " << damage << std::endl;
+		if(hp <= 0.0f){
+			g.incrementCosts(k.position);
+			reset();
+		}
+	}
+    
+	void CtfPlayer::damageReceived(float damage){
+		CtfBase::damageReceived(damage);
+		std::cout << "damage: " << damage << std::endl;
+		hp -= damage;
+		if(hp <= 0.0f){
+			reset();
+		}
+	}
+    
+	// a group (STL vector) of all vehicles in the PlugIn
+	std::vector<CtfBase*> all;
+	std::vector<CtfAgent*> agents;
+	
     bool CtfProyectile::shouldErase(){
     	// Erase when is about to hit the floor
-    	if(k.position.y < 0.0)
+    	if(k.position.y < 0.0){
+    		for(std::vector<CtfAgent*>::iterator it = agents.begin(); it != agents.end();++it){
+    			float distanceToImpact = (k.position - (*it)->k.position).length();
+    			if(distanceToImpact < DAMAGE_RADIUS){
+	    			std::cout << "d: " << distanceToImpact << ", r: " << DAMAGE_RADIUS << std::endl;
+    				(*it)->damageReceived(distanceToImpact <= 1.0f ? PROYECTILE_DAMAGE : PROYECTILE_DAMAGE / distanceToImpact);
+    			}
+    		}
     		return true;
+    	}
     	return false;
     }
     
@@ -1640,7 +1494,9 @@ namespace{
 		        ctfAgent = new CtfAgent;
 		        ctfAgent->setPosition(computerFlagPosition);
 		        ctfAgent->k.setPosition(computerFlagPosition);
+		        ctfAgent->k.g = g;
 		        all.push_back (ctfAgent);
+		        agents.push_back(ctfAgent);
 				ctfPlayer = new CtfPlayer;
 				ctfPlayer->setPosition(computerFlagPosition);
 				ctfPlayer->k.setPosition(computerFlagPosition);
@@ -1804,8 +1660,6 @@ namespace{
 
 		    const AVGroup& allVehicles (void) {return (const AVGroup&) all;}
 
-		    // a group (STL vector) of all vehicles in the PlugIn
-		    std::vector<CtfBase*> all;
 		    
 		    std::vector<CtfProyectile*> proyectiles;
 		};
@@ -1843,7 +1697,7 @@ namespace{
 
         // display status in the upper left corner of the window
         std::ostringstream status;
-        status << resetCount << " restarts" << std::ends;
+        status << resetCount << " restarts" << std::endl << "hp: " << hp << std::ends;
         const float h = drawGetWindowHeight ();
         const Vec3 screenLocation (10, h-50, 0);
         draw2dTextAt2dLocation (status, screenLocation, gGray80, drawGetWindowWidth(), drawGetWindowHeight());
@@ -1973,19 +1827,26 @@ namespace{
 		if(plan_str.size() == 0){
 			plan.push_back(GoToBaseFlag::getSteering);
 		}else{
-			for(std::vector<cpphophtn::task>::iterator it = plan_str.begin(); it != plan_str.end(); it++){
-				if((*it).name == "patrol"){
-					plan.push_back(GoToBaseFlag::getSteering);
-					plan.push_back(Patrol::getSteering);
-				}else if((*it).name == "steal_flag"){
-					plan.push_back(GoToPlayerFlag::getSteering);
-					plan.push_back(GoToBaseFlag::getSteering);
-				}else if((*it).name == "camp"){
-					plan.push_back(Camp::getSteering);
-					plan.push_back(DoNothing::getSteering);
+			if(!cpphophtn::compare_plans(current_plan, plan_str)){
+				plan.clear();
+				for(std::vector<cpphophtn::task>::iterator it = plan_str.begin(); it != plan_str.end(); it++){
+					if((*it).name == "patrol"){
+						plan.push_back(GoToBaseFlag::getSteering);
+						plan.push_back(Patrol::getSteering);
+					}else if((*it).name == "steal_flag"){
+						plan.push_back(GoToPlayerFlag::getSteering);
+						plan.push_back(GoToBaseFlag::getSteering);
+					}else if((*it).name == "camp"){
+						plan.push_back(Camp::getSteering);
+						plan.push_back(DoNothing::getSteering);
+					}
 				}
+				current_plan.clear();
+				for(std::vector<cpphophtn::task>::iterator it = plan_str.begin(); it != plan_str.end();++it){
+					current_plan.push_back(*it);
+				}
+				plan_str.clear();
 			}
-			plan_str.clear();
 		}
 	}
 } // anonymous namespace

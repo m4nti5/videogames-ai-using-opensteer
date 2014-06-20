@@ -4,6 +4,8 @@
 #include <boost/any.hpp>
 #include <tr1/unordered_map>
 
+#ifndef CPPHOPHTN_H
+#define CPPHOPHTN_H
 namespace cpphophtn{
 	
 	class state{
@@ -209,5 +211,8 @@ namespace cpphophtn{
 		private:
 			bool seek_plan(state& state, std::vector<task>& tasks, int depth, std::vector<task>& result, int verbose);
 	};
+		    
+	bool compare_plans(const std::vector<task> & p1, const std::vector<task> & p2);
 }
+#endif
 
