@@ -11,7 +11,9 @@
 		class CustomPath{
 			public:
 				std::vector<Vec3> points;
-				CustomPath(){}
+				float totalCost;
+				
+				CustomPath():totalCost(0.0f){}
 		
 				void addPoint(const Vec3 &point){
 					points.push_back(point);
@@ -33,6 +35,7 @@
 		
 				void clearCustomPath(){
 					points.clear();
+					totalCost = 0.0f;
 				}
 		
 				void getNormalPoint(const Vec3& p, const Vec3& a, const Vec3& b, Vec3 &normal){
@@ -136,6 +139,15 @@
 		
 				inline Vec3& operator[] (std::size_t idx){
 					return points[idx];
+				}
+				
+				inline CustomPath operator=(const CustomPath &p){
+					totalCost = p.totalCost;
+					points.clear();
+					for(std::vector<Vec3>::const_iterator it = p.points.begin(); it != p.points.end(); ++it){
+						points.push_back(*it);
+					}
+					return *this;
 				}
 		
 		};

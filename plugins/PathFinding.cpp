@@ -29,11 +29,12 @@
 
 #define WORLD_FILE	"../files/world2.obj"
 #define MESH_FILE	"../files/mesh2.obj"
-#define INITIAL_AGENT_STATUS 100.0f
+#define INITIAL_AGENT_STATUS 40.0f
 #define INITIAL_PLAYER_STATUS 100.0f
 #define DAMAGE_RADIUS 5.0f
 #define PROYECTILE_DAMAGE 20.0f
 #define PLANTHRESHOLD 3
+#define MAX_VIEW_DISTANCE 30.0f
 
 namespace{
     using namespace OpenSteer;
@@ -802,10 +803,10 @@ namespace{
 							open.push(endNodeRecord);
 						}
 					}
+					path.totalCost = endNodeCost;
 					open.remove(current);
 					closed.push(current);
 				}
-				
 				if(current.node != goal)
 					return false;
 				while(current.node != start){
@@ -1000,14 +1001,18 @@ namespace{
 			static void getSteering(const Kinematic& target, Kinematic& character, SteeringOutput& steering){
 				SteeringOutput localSteering;
 				if(path.size() == 0){
-					Vec3 destination = vantage_points.getClosest(character.position);
-					int initNode = character.g.nodeIndex(character.position);
-					int endNode = character.g.nodeIndex(destination);
-					if(initNode != -1 && endNode != -1){
-						CustomPathFinding::pathFindAStar(character.g, character.g.nodes[initNode], character.g.nodes[endNode], Camp::path);
-						std::cout << initNode << ", " << endNode << ", path: " << path << std::endl;
+					Camp::path.totalCost = FLT_MAX;
+					for(std::vector<Vec3>::iterator it = vantage_points.vpoints.begin(); it != vantage_points.vpoints.end(); ++it){
+						CustomPath path;
+						int initNode = character.g.nodeIndex(character.position);
+						int endNode = character.g.nodeIndex(*it);
+						if(initNode != -1 && endNode != -1){
+							CustomPathFinding::pathFindAStar(character.g, character.g.nodes[initNode], character.g.nodes[endNode], path);
+							path.addPoint(*it);
+						}
+						if(Camp::path.totalCost > path.totalCost)
+							Camp::path = path;
 					}
-					(Camp::path).addPoint(destination);
 				}
 				if(path.isNearEnd(character.position)){
 					Camp::path.clearCustomPath();
@@ -1102,7 +1107,26 @@ namespace{
 		    // Calculates a new plan for the agent
 		    void plan_behaviour (void);
 		    
+		    // informs that the agent was damaged
 		    void damageReceived(float damage);
+		    
+		    // check if the agent can see a given point
+		    bool canSeePoint(const Vec3& point, std::vector<Polygon> & walls){
+		    	float dist = 0.0f;
+		    	Vec3 direction = point - k.position;
+		    	float distPoint = direction.length();
+		    	if(distPoint > MAX_VIEW_DISTANCE)
+		    		return false;
+		    	direction = direction.normalize();
+		    	for(std::vector<Polygon>::iterator it = walls.begin(); it != walls.end();++it){
+		    		Vec3 p;
+		    		if((*it).pointInTriangle(k.position, direction, p) && (p - k.position).length() < distPoint){
+			    		(*it).drawMesh();
+	    				return false;
+		    		}
+		    	}
+		    	return true;
+		    }
     };
 
 	class JumpPoint{
@@ -1432,7 +1456,7 @@ namespace{
 		hp -= damage;
 		std::cout << "damage: " << damage << std::endl;
 		if(hp <= 0.0f){
-			g.incrementCosts(k.position);
+			k.g.incrementCosts(k.position);
 			reset();
 		}
 	}
@@ -1544,9 +1568,10 @@ namespace{
 		        OpenSteerDemo::updateCamera (currentTime, elapsedTime, selected);
 
 				// Draw graph
+				/*
 				if(drawGraph)
 					g.draw();
-				
+				*/
 		      	// draw walls
 		      	for(std::vector<Polygon>::iterator it = walls.begin() ; it != walls.end(); ++it)
 					(*it).draw();
@@ -1697,7 +1722,10 @@ namespace{
 
         // display status in the upper left corner of the window
         std::ostringstream status;
-        status << resetCount << " restarts" << std::endl << "hp: " << hp << std::ends;
+        
+        if(drawGraph)
+        	k.g.draw();
+        status << resetCount << " restarts" << std::endl << "hp: " << hp << std::endl << std::ends;
         const float h = drawGetWindowHeight ();
         const Vec3 screenLocation (10, h-50, 0);
         draw2dTextAt2dLocation (status, screenLocation, gGray80, drawGetWindowWidth(), drawGetWindowHeight());

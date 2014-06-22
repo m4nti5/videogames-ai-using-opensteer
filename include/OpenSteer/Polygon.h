@@ -116,6 +116,24 @@ namespace OpenSteer{
 				return ((b1 == b2) && (b2 == b3));
 		
 			}
+			
+			bool pointInTriangle(const OpenSteer::Vec3& l0, const OpenSteer::Vec3 &l, Vec3 &p){
+				float denom = l.dot(normal);
+				float t;
+				if(denom > 1e-6){
+					OpenSteer::Vec3 v0l0 = v0 - l0;
+					t = v0l0.dot(normal) / denom;
+					if(t < 0.0f)
+						return false;
+					p = l0 + (l * t);
+					if(sameSide(p, v0, v1, v2) && sameSide(p, v1, v0, v2) && sameSide(p, v2, v0, v1)){
+						return true;
+					}
+					return false;
+				}
+				return false;
+			}
+			
 		private:
 			void calculateNormal(){
 				OpenSteer::Vec3 e0 = v1 - v0;
@@ -135,10 +153,21 @@ namespace OpenSteer{
 			float signyz(const OpenSteer::Vec3 &p1, const OpenSteer::Vec3 &p2, const OpenSteer::Vec3 &p3){
 				return (p1.y - p3.y) * (p2.z - p3.z) - (p2.y - p3.y) * (p1.z - p3.z);
 			}
+			
+			bool sameSide(Vec3& p1, Vec3& p2, Vec3& a,Vec3& b){
+				Vec3 cp1 = crossProduct(b-a, p1-a);
+				Vec3 cp2 = crossProduct(b-a, p2-a);
+				if(cp1.dot(cp2) >= 0)
+					return true;
+				return false;
+    		}
 	};
-	
 	// check if the connection between 2 polygons hits a wall
 	bool notClipped(std::vector<Polygon>& walls,Polygon &p1, Polygon &p2);
+		
+	inline std::ostream& operator<< (std::ostream& o, const Polygon& p){
+		return o << p.v0 << ", " << p.v1 << ", " << p.v2 << std::endl;
+	}
 }
 #endif
 

@@ -26,3 +26,4 @@ bool OpenSteer::notClipped(std::vector<OpenSteer::Polygon>& walls,OpenSteer::Pol
 	}
 	return true;
 }
+

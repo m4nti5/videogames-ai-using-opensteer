@@ -13,7 +13,7 @@ namespace OpenSteer {
 			float maxIncrement;
 			float damageIncrement;
 			
-			Graph(void):lastid(0),damageIncrement(5.0f),maxIncrement(1000.0f){}
+			Graph(void):lastid(0),damageIncrement(105.0f),maxIncrement(1000.0f){}
 			
 			int addNode(const Vec3& position){
 				int node_id = lastid++;
@@ -102,14 +102,22 @@ namespace OpenSteer {
 			
 			void incrementCosts(const Vec3& p){
 				for(std::vector<Node>::iterator n = nodes.begin();n != nodes.end();++n){
-					if((*n).insideNode(p)){
-						for(std::vector<Connection>::iterator it = (*n).adyacents.begin(); it != (*n).adyacents.end(); ++it){
+					Node &node_start = *n;
+					if(node_start.insideNode(p)){
+						for(std::vector<Connection>::iterator it = node_start.adyacents.begin(); it != node_start.adyacents.end(); ++it){
 							Node &to = nodes[(*it).toNode];
 							Node &from = nodes[(*it).fromNode];
 							if(((*it).cost - (to.position - from.position).length()) < maxIncrement){
 								(*it).cost += damageIncrement;
+								for(std::vector<Connection>::iterator ad = to.adyacents.begin(); ad != to.adyacents.end();++ ad){
+									if((*ad).toNode == (*it).fromNode){
+										(*ad).cost += damageIncrement;
+										break;
+									}
+								}
 							}
 						}
+						break;
 					}
 				}
 			}
