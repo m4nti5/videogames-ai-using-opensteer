@@ -1,6 +1,7 @@
 #include <iostream>
 #include <set>
 #include <boost/assign.hpp>
+#include <boost/thread.hpp>
 #include "cpphop.hpp"
 
 using namespace cpphophtn;
@@ -405,7 +406,7 @@ void first_set_test(){
 	declare_methods1(htn);
 	
 	std::vector<task> plan;
-	bool res = htn.plan(state1, tasks, plan, 1);
+	bool res = htn.plan(state1, tasks, plan, 1, 0);
 	
 	tasks.clear();
 	t.name = "pickup";
@@ -416,7 +417,7 @@ void first_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1);
+	res = htn.plan(state1, tasks, plan, 1, 0);
 	
 	std::cout << "- these should succeed" << std::endl;
 	tasks.clear();
@@ -428,7 +429,7 @@ void first_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1);
+	res = htn.plan(state1, tasks, plan, 1, 0);
 	
 	tasks.clear();
 	t.name = "unstack";
@@ -440,7 +441,7 @@ void first_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1);
+	res = htn.plan(state1, tasks, plan, 1, 0);
 	
 	tasks.clear();
 	t.name = "get";
@@ -451,7 +452,7 @@ void first_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1);
+	res = htn.plan(state1, tasks, plan, 1, 0);
 	
 	std::cout << "- this should fail" << std::endl;
 	
@@ -464,7 +465,7 @@ void first_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1);
+	res = htn.plan(state1, tasks, plan, 1, 0);
 	
 	std::cout << "- this should succeed" << std::endl;
 	
@@ -477,7 +478,7 @@ void first_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1);
+	res = htn.plan(state1, tasks, plan, 1, 0);
 }
 
 // second test two-block stacking problems
@@ -507,7 +508,7 @@ void second_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	std::vector<task> plan;
-	htn.plan(state1, tasks, plan, 1);
+	htn.plan(state1, tasks, plan, 1, 0);
 	
 	tasks.clear();
 	task t2;
@@ -519,7 +520,25 @@ void second_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	plan.clear();
-	htn.plan(state1, tasks, plan, 1);
+	htn.plan(state1, tasks, plan, 1, 0);
+}
+
+
+void fthreaded(cpphop &htn, state& state, std::vector<task> &tasks, std::vector<task>& result, int verbose, suseconds_t miliseconds){
+	return_state_t res = htn.plan(state, tasks, result, verbose, miliseconds);
+	switch(res){
+		case STATE_TRUE:
+			std::cout << "TRUE";
+			break;
+		case STATE_FALSE:
+			std::cout << "FALSE";
+			break;
+		case STATE_PAUSED:
+			std::cout << "PAUSED";
+			break;
+	}
+	std::cout << std::endl;
+	sleep(10);
 }
 
 // third set
@@ -557,7 +576,7 @@ void third_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	std::vector<task> plan;
-	htn.plan(state2, tasks, plan, 3);
+	htn.plan(state2, tasks, plan, 3, 0);
 	
 	tasks.clear();
 	task t2;
@@ -569,7 +588,20 @@ void third_set_test(){
 	declare_operators(htn);
 	declare_methods1(htn);
 	plan.clear();
-	htn.plan(state2, tasks, plan, 3);
+	//htn.plan(state2, tasks, plan, 3, 0);
+	
+		
+	boost::thread thr(fthreaded, htn, state2, tasks, plan, 3, 1);
+	std::cout << "*******THREAD INICIADO!!!" << std::endl;
+	if(htn.pause_plan()){
+		std::cout << "*******PAUSED!!!" << std::endl;
+		sleep(5);
+		std::cout << "*******Going to plan again!!!!!" << std::endl;
+		htn.plan(state2, tasks, plan, 1, 0);
+	}else{
+		std::cout << "*******DID NOT PAUSE!!!" << std::endl;
+	}
+	
 }
 
 // fourth_set, bw_large_d from SHOP distribution
@@ -597,13 +629,17 @@ void fourth_set_test(){
 	tasks.push_back(t);
 	
 	std::cout << "- This should succeed" << std::endl;
+	
 	cpphop htn;
 	declare_operators(htn);
 	declare_methods1(htn);
 	std::vector<task> plan;
-	htn.plan(state3, tasks, plan, 1);
+	/*
+	while(htn.plan(state3, tasks, plan, 1, 1) == STATE_PAUSED){
+		std::cout << "***** PAUSED!!!!";
+	}
+	*/
 }
-
 
 
 
@@ -621,7 +657,7 @@ void fith_set_test(){
 	declare_methods2(htn);
 	
 	std::vector<task> plan;
-	htn.plan(state1, tasks, plan, 2);
+	htn.plan(state1, tasks, plan, 2, 0);
 	
 	std::cout << "****Now it shouldn't backtrack****" << std::endl << std::endl;
 	
@@ -636,7 +672,7 @@ void fith_set_test(){
 	declare_methods2(htn);
 	
 	plan.clear();
-	htn.plan(state1, tasks, plan, 2);
+	htn.plan(state1, tasks, plan, 2, 0);
 	
 	std::cout << "****Now it should fail****" << std::endl << std::endl;
 	
@@ -651,7 +687,7 @@ void fith_set_test(){
 	declare_methods2(htn);
 	
 	plan.clear();
-	htn.plan(state1, tasks, plan, 2);
+	htn.plan(state1, tasks, plan, 2, 0);
 }
 
 int main(){

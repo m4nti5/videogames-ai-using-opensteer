@@ -174,7 +174,7 @@ void simple_test(){
 	loc["me"] = "home";
 	s.variables["loc"] = boost::any(loc);
 	
-	htn.plan(s, tasks, plan, 3);
+	htn.plan(s, tasks, plan, 3, 0);
 	std::cout << "plan: " << plan << std::endl;
 }
 
@@ -236,7 +236,7 @@ void compound_test(){
 	t.parameters["y"] = boost::any(std::string("park"));
 	tasks.push_back(t);
 	
-	htn.plan(s, tasks, plan, 3);
+	htn.plan(s, tasks, plan, 3, 0);
 	
 }
 

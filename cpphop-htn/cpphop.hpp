@@ -3,6 +3,9 @@
 #include <map>
 #include <boost/any.hpp>
 #include <tr1/unordered_map>
+#include <sys/time.h>
+#include <boost/atomic.hpp>
+#include <boost/thread.hpp>
 
 namespace cpphophtn{
 	
@@ -12,6 +15,7 @@ namespace cpphophtn{
 			std::map<std::string, boost::any> variables;
 			
 			inline state operator= (const state& s) {
+				this->name = s.name;
 				this->variables.clear();
 				this->variables.insert(s.variables.begin(), s.variables.end());
 				return *this;
@@ -154,12 +158,59 @@ namespace cpphophtn{
 		return o << std::endl;
 	}
 	
+	class cpphop_pause_info{
+		public:
+			bool saved;
+			state saved_state;
+			std::vector<task>tasks;
+			int depth;
+			std::vector<task>result;
+			
+			inline cpphop_pause_info operator=(const cpphop_pause_info & c){
+				saved = c.saved;
+				saved_state = c.saved_state;
+				tasks.clear();
+				for(std::vector<task>::const_iterator it = c.tasks.begin(); it != c.tasks.end(); ++it){
+					tasks.push_back(*it);
+				}
+				depth = c.depth;
+				result.clear();
+				for(std::vector<task>::const_iterator it = c.result.begin(); it != c.result.end(); ++it){
+					result.push_back(*it);
+				}
+			}
+	};
+	
+	typedef enum return_state_t{
+		STATE_TRUE,
+		STATE_FALSE,
+		STATE_PAUSED
+	}return_state_t;
+	
 	class cpphop{
 		public:
 			std::tr1::unordered_map< std::string, htn_operator, std::tr1::hash<std::string> > operators;
 			std::tr1::unordered_map< std::string, std::vector<method>, std::tr1::hash<std::string> > methods;
 			
-			cpphop(){}
+			cpphop(): pause(false), paused(false){paused_info.saved = false;}
+			cpphop(const cpphop& c){
+				this->operators.clear();
+				this->operators.insert(c.operators.begin(), c.operators.end());
+				this->methods.clear();
+				this->methods.insert(c.methods.begin(), c.methods.end());
+				if(c.pause)
+					this->pause = true;
+				else
+					this->pause = false;
+				if(c.paused)
+					this->paused = true;
+				else
+					this->paused = false;
+				if(c.running)
+					this->running = true;
+				else
+					this->running = false;
+			}
 			
 			void declare_operator(const std::string& name, htn_operator &op){
 				operators.insert(std::make_pair<std::string, htn_operator>(name, op));
@@ -181,7 +232,9 @@ namespace cpphophtn{
 				methods.insert(std::make_pair< std::string, std::vector<method> >(name, m));
 			}
 			
-			bool plan(state& state, std::vector<task> &tasks, std::vector<task>& result, int verbose);
+			return_state_t plan(state& state, std::vector<task> &tasks, std::vector<task>& result, int verbose, suseconds_t miliseconds);
+			
+			bool pause_plan();
 			
 			bool get_operator(const std::string &name, htn_operator &op){
 				std::tr1::unordered_map< std::string, htn_operator>::iterator it = operators.find(name);
@@ -206,8 +259,41 @@ namespace cpphophtn{
 				methods.clear();
 			}
 			
+			inline cpphop operator= (const cpphop& c){
+				this->operators.clear();
+				this->operators.insert(c.operators.begin(), c.operators.end());
+				this->methods.clear();
+				this->methods.insert(c.methods.begin(), c.methods.end());
+				if(c.pause)
+					this->pause = true;
+				else
+					this->pause = false;
+				if(c.paused)
+					this->paused = true;
+				else
+					this->paused = false;
+				if(c.running)
+					this->running = true;
+				else
+					this->running = false;
+				return *this;
+			}
+			
+			
+			bool isRunningPlanification(){
+				return running;
+			}
+			
 		private:
-			bool seek_plan(state& state, std::vector<task>& tasks, int depth, std::vector<task>& result, int verbose);
+			mutable boost::atomic<bool> running;
+			mutable boost::atomic<bool> pause;
+			mutable boost::atomic<bool> paused;
+			boost::condition_variable plan_paused;
+			boost::mutex m;
+			cpphop_pause_info paused_info;
+			void load_pause_info(state& state, std::vector<task>& tasks, int& depth, std::vector<task>& result);
+			void save_pause_info(state& state, std::vector<task>& tasks, int& depth, std::vector<task>& result);
+			return_state_t seek_plan(state& state, std::vector<task>& tasks, int depth, std::vector<task>& result, int verbose, suseconds_t miliseconds, suseconds_t time_elapsed);
 	};
 }
 
