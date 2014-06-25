@@ -1,4 +1,7 @@
-all: cpphop block_world_example simple_travel_example
+all: cpphop block_world_example simple_travel_example threaded_example
+
+threaded_example: threaded_example.cpp
+	g++ -g -o threaded_example threaded_example.cpp cpphop.o -lboost_system -lboost_thread
 
 simple_travel_example: cpphop simple_travel_example.cpp
 	g++ -g -o simple_travel_example simple_travel_example.cpp cpphop.o -lboost_system -lboost_thread

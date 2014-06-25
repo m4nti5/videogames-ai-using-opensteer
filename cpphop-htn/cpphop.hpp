@@ -236,6 +236,8 @@ namespace cpphophtn{
 			
 			bool pause_plan();
 			
+			return_state_t resume();
+			
 			bool get_operator(const std::string &name, htn_operator &op){
 				std::tr1::unordered_map< std::string, htn_operator>::iterator it = operators.find(name);
 				if(it == operators.end()){
@@ -285,11 +287,11 @@ namespace cpphophtn{
 			}
 			
 		private:
-			mutable boost::atomic<bool> running;
-			mutable boost::atomic<bool> pause;
-			mutable boost::atomic<bool> paused;
+			bool running;
+			bool pause;
+			bool paused;
 			boost::condition_variable plan_paused;
-			boost::mutex m;
+			boost::mutex mutex;
 			cpphop_pause_info paused_info;
 			void load_pause_info(state& state, std::vector<task>& tasks, int& depth, std::vector<task>& result);
 			void save_pause_info(state& state, std::vector<task>& tasks, int& depth, std::vector<task>& result);

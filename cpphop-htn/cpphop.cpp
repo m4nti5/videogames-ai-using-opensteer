@@ -13,8 +13,10 @@ void cpphop::load_pause_info(state& state, std::vector<task>& tasks, int& depth,
 	result.clear();
 	for(std::vector<task>::iterator it = paused_info.result.begin(); it != paused_info.result.end(); ++it)
 		result.push_back(*it);
-	paused = false;
-	pause = false;
+	mutex.lock();
+		paused = false;
+		pause = false;
+	mutex.unlock();
 }
 
 void cpphop::save_pause_info(state& state, std::vector<task>& tasks, int& depth, std::vector<task>& result){
@@ -28,6 +30,7 @@ void cpphop::save_pause_info(state& state, std::vector<task>& tasks, int& depth,
 	for(std::vector<task>::iterator it = result.begin(); it != result.end(); ++it)
 		paused_info.result.push_back(*it);
 	if(pause){
+		boost::mutex::scoped_lock lock(mutex);
 		paused = true;
 		plan_paused.notify_one();
 	}
@@ -38,7 +41,9 @@ void cpphop::save_pause_info(state& state, std::vector<task>& tasks, int& depth,
     If successful, return true. Otherwise return False.
 */
 return_state_t cpphop::plan(state& state, std::vector<task> &tasks, std::vector<task>& result, int verbose, suseconds_t miliseconds){
-	running = true;
+	mutex.lock();
+		running = true;
+	mutex.unlock();
     if(verbose > 0){
     	std::cout << "** cpphop, verbose= " << verbose <<  std::endl << "** state = " << state << std::endl << "** tasks = " << tasks;
     }
@@ -63,8 +68,11 @@ return_state_t cpphop::plan(state& state, std::vector<task> &tasks, std::vector<
     			break;
     	}
     }
-    if(!paused)
-	    running = false;
+    mutex.lock();
+		if(!paused){
+			running = false;
+		}
+	mutex.unlock();
     return runned;
 }
 
@@ -110,11 +118,15 @@ return_state_t cpphop::seek_plan(state& current_state, std::vector<task>& tasks,
 			gettimeofday(&tp, &tz);
 			suseconds_t runtime = (tp.tv_sec * 1000 + tp.tv_usec / 1000) - ms;
 			return_state_t solution;
-    		if((miliseconds == 0 || runtime + time_elapsed < miliseconds) && !pause){
+			bool p;
+			mutex.lock();
+				p = pause;
+			mutex.unlock();
+    		if((miliseconds == 0 || runtime + time_elapsed < miliseconds) && !p){
 	    		solution = seek_plan(newstate, newtasks, depth + 1, plan, verbose, miliseconds, time_elapsed + runtime);
 	    	}else{
 	    		if(verbose > 0){
-					if(!pause)
+					if(!p)
 						std::cout << "Time expired, saving info... " << runtime + time_elapsed << std::endl;
 					else
 						std::cout << "Paused by other thread... " << runtime + time_elapsed << std::endl;
@@ -147,11 +159,15 @@ return_state_t cpphop::seek_plan(state& current_state, std::vector<task>& tasks,
 				gettimeofday(&tp, &tz);
 				suseconds_t runtime = (tp.tv_sec * 1000 + tp.tv_usec / 1000) - ms;
 				return_state_t solution;
-				if((miliseconds == 0 || runtime + time_elapsed < miliseconds) && !pause){
+				bool p;
+				mutex.lock();
+					p = pause;
+				mutex.unlock();
+				if((miliseconds == 0 || runtime + time_elapsed < miliseconds) && !p){
 					solution = seek_plan(current_state, subtasks, depth + 1, plan, verbose, miliseconds, time_elapsed + runtime);
 				}else{
 					if(verbose > 0)	{
-						if(!pause)
+						if(!p)
 				    		std::cout << "Time expired, saving info... " << runtime + time_elapsed << std::endl;
 				    	else
 							std::cout << "Paused by other thread... " << runtime + time_elapsed << std::endl;
@@ -174,9 +190,9 @@ return_state_t cpphop::seek_plan(state& current_state, std::vector<task>& tasks,
 bool cpphop::pause_plan(){
 	if(!running)
 		return false;
+	boost::mutex::scoped_lock lock(mutex);
 	pause = true;
 	while(!paused){
-		boost::mutex::scoped_lock lock(m);
 		plan_paused.wait(lock);
 	}
 	return true;

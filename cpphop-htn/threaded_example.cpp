@@ -1,8 +1,174 @@
 #include <iostream>
 #include <set>
+#include <boost/atomic.hpp>
 #include <boost/assign.hpp>
 #include <boost/thread.hpp>
 #include "cpphop.hpp"
+
+using namespace cpphophtn;
+
+typedef enum work_status_t{
+	WORK_WAITING,
+	WORK_WORKING,
+	WORK_READY
+}work_status_t;
+
+// Contiene información de un trabajo a ser procesado
+class work_t{
+	public:
+		unsigned long long id;
+		void (*func)(work_t *w);
+		void *param;
+		std::vector<task> result;
+		return_state_t result_status;
+		work_status_t work_status;
+		boost::mutex m;
+		boost::condition_variable work_end;
+		
+		work_t ():work_status(WORK_WAITING) {}
+		
+		work_t (const work_t &w){
+			id = w.id;
+			func = w.func;
+			param = w.param;
+			result_status = w.result_status;
+			work_status = w.work_status;
+			result.clear();
+			for(std::vector<task>::const_iterator it = w.result.begin(); it != w.result.end(); ++it){
+				result.push_back(*it);
+			}
+		}
+		
+		void wait(){
+			boost::mutex::scoped_lock lock(m);
+			while(work_status != WORK_READY){
+				work_end.wait(lock);
+			}
+		}
+		
+		inline work_t operator=(const work_t &w){
+			id = w.id;
+			func = w.func;
+			param = w.param;
+			result_status = w.result_status;
+			work_status = w.work_status;
+			result.clear();
+			for(std::vector<task>::const_iterator it = w.result.begin(); it != w.result.end(); ++it){
+				result.push_back(*it);
+			}
+			return *this;
+		}
+};
+
+// Cola de trabajo, maneja todo el trabajo que se le imponga
+class work_queue_t{
+	public:
+		work_queue_t():lastid(1), over(false) {}
+		void start();
+		unsigned long long add_work(work_t *w);
+		work_status_t get_work_result(unsigned long long int id, bool wait, std::vector<task> &result);
+		void end();
+		void run();
+		work_t *search(unsigned long long id);
+		work_status_t erase(unsigned long long id);
+		
+	private:
+		std::map<unsigned long long, work_t *> queue;
+		boost::condition_variable work_paused;
+		bool over;
+		boost::mutex m;
+		unsigned long long int lastid;
+		boost::thread thr;
+};
+
+void work_queue_t::start(){
+	thr = boost::thread(&work_queue_t::run, this);
+}
+
+void work_queue_t::run(){
+	while(!over){
+		boost::mutex::scoped_lock lock(m);
+			while(queue.empty() && !over){
+				work_paused.wait(lock);
+			}
+		lock.unlock();
+		if(over)
+			break;
+		// work received
+		unsigned long long id = 0;
+		lock.lock();
+			for(std::map<unsigned long long, work_t*>::iterator it = queue.begin(); it != queue.end();++it){
+				if((*it).second->work_status == WORK_WAITING){
+					id = (*it).first;
+					break;
+				}
+			}
+			if(id > 0){
+				work_t *w = (*(queue.find(id))).second;
+				lock.unlock();
+					boost::mutex::scoped_lock wlock(w->m);
+					w->work_status = WORK_WORKING;
+					std::cout << "****************RUNNING FUNCTION***************" << std::endl << std::endl;
+					if(w->func)
+						w->func(w);
+					std::cout << "****************FUNCTION ENDED***************" << std::endl << std::endl;
+					w->work_status = WORK_READY;
+					w->work_end.notify_one();
+				lock.lock();
+			}
+		lock.unlock();
+	}
+}
+
+void work_queue_t::end(){
+	m.lock();
+		over = true;
+		queue.clear();
+		work_paused.notify_one();
+	m.unlock();
+	thr.join();
+}
+
+unsigned long long work_queue_t::add_work(work_t *w){
+	w->id = lastid;
+	w->work_status = WORK_WAITING;
+	boost::mutex::scoped_lock lock(m);
+	queue.insert(std::pair<unsigned long long, work_t *>(lastid,w));
+	lastid++;
+	work_paused.notify_one();
+	return w->id;
+}
+
+work_status_t work_queue_t::get_work_result(unsigned long long id, bool wait, std::vector<task> &result){
+	work_t *w = search(id);
+	if(!w){
+		return WORK_WAITING;
+	}
+	if(wait){
+		w->wait();
+		return erase(id);
+	}
+	if(w->work_status != WORK_READY)
+		return w->work_status;
+	return erase(id);
+}
+
+work_t *work_queue_t::search(unsigned long long id){
+	boost::mutex::scoped_lock lock(m);
+	std::map<unsigned long long, work_t *>::iterator wit = queue.find(id);
+	if(wit == queue.end())
+		return NULL;
+	work_t *w = (*wit).second;
+	return w;
+}
+
+work_status_t work_queue_t::erase(unsigned long long id){
+	boost::mutex::scoped_lock lock(m);
+	std::map<unsigned long long, work_t *>::iterator it = queue.find(id);
+	work_status_t status = ((*it).second)->work_status;
+	queue.erase(it);
+	return status;
+}
 
 using namespace cpphophtn;
 
@@ -389,142 +555,46 @@ void declare_methods2(cpphop &htn){
 	mtds.clear();
 }
 
-// first_set_test very simple, small tasks and operators
-
-state state1;
-void first_set_test(){
-	std::cout << "****first_set_test very simple, small tasks and operators****" << std::endl << std::endl;
-	std::cout << "- these should fail"<< std::endl;
-	std::vector<task> tasks;
-	task t;
-	t.name = "pickup";
-	t.parameters["b"] = boost::any(std::string("a"));
-	tasks.push_back(t);
+cpphop htn1;
+void third_set_test1(work_t *w){
+	std::cout << "*******************Thread working id: " << w->id << std::endl;
 	
-	cpphop htn;
-	declare_operators(htn);
-	declare_methods1(htn);
+	state state2;
+	std::cout << "****third set, another block****" << std::endl << std::endl;
+	state2.name = "state2";
+	std::map<std::string, std::string> pos = boost::assign::map_list_of ("g", "a") ("a", "c") ("c", "e") ("f", "d") ("d", "b") ("b", "h") ("e", "table") ("h", "table");
+	state2.variables["pos"] = boost::any(pos);
+	std::map<std::string, bool> clear = boost::assign::map_list_of ("g", true) ("a", false) ("c", false) ("e", false) ("f", true) ("d", false) ("b", false) ("h", false);
+	state2.variables["clear"] = boost::any(clear);
+	state2.variables["holding"] = boost::any(std::string(""));
 	
-	std::vector<task> plan;
-	bool res = htn.plan(state1, tasks, plan, 1, 0);
-	
-	tasks.clear();
-	t.name = "pickup";
-	t.parameters["b"] = boost::any(std::string("b"));
-	tasks.push_back(t);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods1(htn);
-	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1, 0);
-	
-	std::cout << "- these should succeed" << std::endl;
-	tasks.clear();
-	t.name = "pickup";
-	t.parameters["b"] = boost::any(std::string("c"));
-	tasks.push_back(t);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods1(htn);
-	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1, 0);
-	
-	tasks.clear();
-	t.name = "unstack";
-	t.parameters["b"] = boost::any(std::string("a"));
-	t.parameters["c"] = boost::any(std::string("b"));
-	tasks.push_back(t);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods1(htn);
-	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1, 0);
-	
-	tasks.clear();
-	t.name = "get";
-	t.parameters["b1"] = boost::any(std::string("a"));
-	tasks.push_back(t);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods1(htn);
-	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1, 0);
-	
-	std::cout << "- this should fail" << std::endl;
-	
-	tasks.clear();
-	t.name = "get";
-	t.parameters["b1"] = boost::any(std::string("b"));
-	tasks.push_back(t);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods1(htn);
-	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1, 0);
-	
-	std::cout << "- this should succeed" << std::endl;
-	
-	tasks.clear();
-	t.name = "get";
-	t.parameters["b1"] = boost::any(std::string("c"));
-	tasks.push_back(t);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods1(htn);
-	plan.clear();
-	res = htn.plan(state1, tasks, plan, 1, 0);
-}
-
-// second test two-block stacking problems
-void second_set_test(){
-	state goal1a;
-	std::cout << "****second test two-block stacking problems, some conditions on the second goal are not declared, but still, will have to be met****" << std::endl << std::endl;
-	goal1a.name = "goal1a";
-	std::map<std::string, std::string> pos = boost::assign::map_list_of ("c", "b") ("b", "a") ("a", "table");
-	goal1a.variables["pos"] = boost::any(pos);
-	std::map<std::string, bool> clear = boost::assign::map_list_of ("c", true) ("b", false) ("a", false);
-	goal1a.variables["clear"] = boost::any(clear);
-	goal1a.variables["holding"] = boost::any(false);
-	
-	state goal1b;
-	goal1b.name = "goal1b";
-	pos = boost::assign::map_list_of ("c", "b") ("b", "a");
-	goal1b.variables["pos"] = boost::any(pos);
+	state goal2a;
+	goal2a.name = "goal2a";
+	pos = boost::assign::map_list_of("a", "b") ("b", "c") ("c", "d") ("e", "f") ("f", "g") ("g", "h") ("d", "table") ("h", "table");
+	goal2a.variables["pos"] = boost::any(pos);
+	clear = boost::assign::map_list_of("a", true) ("b", false) ("c", false) ("d", false) ("e", true) ("f", false) ("g", false) ("h", false);
+	goal2a.variables["clear"] = boost::any(clear);
+	goal2a.variables["holding"] = boost::any(std::string(""));
 	
 	std::vector<task> tasks;
 	task t1;
 	t1.name = "move_blocks";
-	t1.parameters["goal"] = boost::any(goal1a);
+	t1.parameters["goal"] = boost::any(goal2a);
 	tasks.push_back(t1);
 	
 	std::cout << "- These should succeed" << std::endl;
-	cpphop htn;
-	declare_operators(htn);
-	declare_methods1(htn);
+	declare_operators(htn1);
+	declare_methods1(htn1);
 	std::vector<task> plan;
-	htn.plan(state1, tasks, plan, 1, 0);
-	
-	tasks.clear();
-	task t2;
-	t2.name = "move_blocks";
-	t2.parameters["goal"] = boost::any(goal1b);
-	tasks.push_back(t2);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods1(htn);
-	plan.clear();
-	htn.plan(state1, tasks, plan, 1, 0);
+	std::cout << "###################### RUNNING PLAN 1 #####################"<< std::endl << std::endl;
+	htn1.plan(state2, tasks, plan, 3, 0);
+	std::cout << "###################### PLAN 1 ENDED #####################"<< std::endl << std::endl;
 }
 
-// third set
-void third_set_test(){
+cpphop htn2;
+void third_set_test2(work_t *w){
+	std::cout << "*******************Thread working id: " << w->id << std::endl;
+	
 	state state2;
 	std::cout << "****third set, another block****" << std::endl << std::endl;
 	state2.name = "state2";
@@ -534,143 +604,95 @@ void third_set_test(){
 	state2.variables["clear"] = boost::any(clear);
 	state2.variables["holding"] = boost::any(std::string(""));
 	
-	state goal2a;
-	goal2a.name = "goal2a";
-	pos = boost::assign::map_list_of("b", "c") ("a", "d") ("c", "table") ("d", "table");
-	goal2a.variables["pos"] = boost::any(pos);
-	clear = boost::assign::map_list_of("a", true) ("c", false) ("b", true) ("d", false);
-	goal2a.variables["clear"] = boost::any(clear);
-	goal2a.variables["holding"] = boost::any(std::string(""));
-	
 	state goal2b;
 	goal2b.name = "goal2b";
 	pos = boost::assign::map_list_of("b", "c") ("a", "d") ;
 	goal2b.variables["pos"] = boost::any(pos);
 	
 	std::vector<task> tasks;
-	task t1;
-	t1.name = "move_blocks";
-	t1.parameters["goal"] = boost::any(goal2a);
-	tasks.push_back(t1);
-	
-	std::cout << "- These should succeed" << std::endl;
-	cpphop htn;
-	declare_operators(htn);
-	declare_methods1(htn);
-	std::vector<task> plan;
-	htn.plan(state2, tasks, plan, 3, 0);
-	
-	tasks.clear();
 	task t2;
 	t2.name = "move_blocks";
 	t2.parameters["goal"] = boost::any(goal2b);
 	tasks.push_back(t2);
 	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods1(htn);
-	plan.clear();
-	htn.plan(state2, tasks, plan, 3, 0);
-	
+	htn2.clear();
+	declare_operators(htn2);
+	declare_methods1(htn2);
+	std::vector<task> plan;
+	std::cout << "###################### RUNNING PLAN 2 #####################"<< std::endl << std::endl;
+	htn2.plan(state2, tasks, plan, 3, 0);
+	std::cout << "###################### PLAN 2 ENDED #####################"<< std::endl << std::endl;
 }
 
-// fourth_set, bw_large_d from SHOP distribution
-void fourth_set_test(){
-	std::cout << "****fourth_set, bw_large_d from SHOP distribution****" << std::endl << std::endl;
-	state state3;
-	state3.name = "state3";
-	std::map<std::string, std::string> pos = boost::assign::map_list_of("1", "12") ("12", "13") ("13", "table") ("11", "10") ("10", "5") ("5", "4") ("4", "14") ("14", "15") ("15", "table") ("9", "8") ("8", "7") ("7", "6") ("6", "table") ("19", "18") ("18", "17") ("17", "16") ("16", "3") ("3", "2") ("2", "table");
-	state3.variables["pos"] = boost::any(pos);
-	std::map<std::string, bool> clear = boost::assign::map_list_of("1", true) ("2", false) ("3", false) ("4", false) ("5", false) ("6", false) ("7", false) ("8", false) ("9", true) ("10", false)("11", true)("12", false)("13", false)("14", false)("15", false)("16", false)("17", false)("18", false)("19", true);
-	state3.variables["clear"] = boost::any(clear);
-	state3.variables["holding"] = boost::any(std::string(""));
+void resume_set_test1(work_t *w){
 	
-	state goal3;
-	goal3.name = "goal3";
-	pos = boost::assign::map_list_of("15", "13") ("13", "8") ("8", "9") ("9", "4") ("4", "table") ("12", "2") ("2", "3") ("3", "16") ("16", "11") ("11", "7") ("7", "6") ("6", "table");
-	goal3.variables["pos"] = boost::any(pos);
-	clear = boost::assign::map_list_of("17", true) ("15", true) ("12", true);
-	goal3.variables["clear"] = boost::any(clear);
-	
+	state state;
 	std::vector<task> tasks;
-	task t;
-	t.name = "move_blocks";
-	t.parameters["goal"] = boost::any(goal3);
-	tasks.push_back(t);
+	std::vector<task> result;
+	int verbose;
+	suseconds_t miliseconds;
 	
-	std::cout << "- This should succeed" << std::endl;
-	
-	cpphop htn;
-	declare_operators(htn);
-	declare_methods1(htn);
-	std::vector<task> plan;
-	while(htn.plan(state3, tasks, plan, 1, 1) == STATE_PAUSED){
-		std::cout << "***** PAUSED!!!!";
-	}
-}
+	std::cout << "###################### RESUMING PLAN 1 #####################"<< std::endl << std::endl;
+	htn1.plan(state, tasks, result, verbose, miliseconds);
+	std::cout << "###################### PLAN 1 ENDED #####################"<< std::endl << std::endl;
 
-
-
-void fith_set_test(){
-	std::cout << "****backtracking test****" << std::endl << std::endl;
-	
-	std::vector<task> tasks;
-	task t;
-	t.name = "get";
-	t.parameters["b1"] = boost::any(std::string("a"));
-	tasks.push_back(t);
-	
-	cpphop htn;
-	declare_operators(htn);
-	declare_methods2(htn);
-	
-	std::vector<task> plan;
-	htn.plan(state1, tasks, plan, 2, 0);
-	
-	std::cout << "****Now it shouldn't backtrack****" << std::endl << std::endl;
-	
-	tasks.clear();
-	task t2;
-	t2.name = "get";
-	t2.parameters["b1"] = boost::any(std::string("c"));
-	tasks.push_back(t2);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods2(htn);
-	
-	plan.clear();
-	htn.plan(state1, tasks, plan, 2, 0);
-	
-	std::cout << "****Now it should fail****" << std::endl << std::endl;
-	
-	tasks.clear();
-	task t3;
-	t3.name = "get";
-	t3.parameters["b1"] = boost::any(std::string("b"));
-	tasks.push_back(t3);
-	
-	htn.clear();
-	declare_operators(htn);
-	declare_methods2(htn);
-	
-	plan.clear();
-	htn.plan(state1, tasks, plan, 2, 0);
 }
 
 int main(){
-	state1.name = "state1";
-	std::map<std::string, std::string> pos = boost::assign::map_list_of("a", "b") ("b", "table") ("c", "table");
-	state1.variables["pos"] = boost::any(pos);
-	std::map<std::string, bool> clear = boost::assign::map_list_of("a", true) ("b", false) ("c", true);
-	state1.variables["clear"] = boost::any(clear);
-	state1.variables["holding"] = boost::any(std::string(""));
-
-	first_set_test();
-	second_set_test();
-	third_set_test();
-	fourth_set_test();
-	fith_set_test();
+	
+	work_t w;
+	w.func = third_set_test1;
+	
+	work_queue_t q;
+	q.start();
+	unsigned long long id1 = q.add_work(&w);
+	work_t w2;
+	w2.func = third_set_test2;
+	unsigned long long id2 = q.add_work(&w2);
+	
+	std::vector<task> r;
+	bool iterate = true;
+	while(iterate){
+		work_status_t ws = q.get_work_result(id1, false, r);
+		switch(ws){
+			case WORK_READY:
+				std::cout << "PLAN 1 PAUSED!!!" << std::endl;
+				iterate = false;
+				break;
+			case WORK_WORKING:
+				std::cout << "PAUSING PLAN 1!!!!" << std::endl;
+				if(htn1.pause_plan()){
+					work_status_t ws = q.get_work_result(id1, true, r);
+					iterate = false;
+				}
+				break;
+		}
+	}
+	iterate = true;
+	
+	while(iterate){
+		work_status_t ws = q.get_work_result(id2, true, r);
+		switch(ws){
+			case WORK_READY:
+				iterate = false;
+				break;
+		}
+	}
+	
+	work_t w3;
+	w3.func = resume_set_test1;
+	unsigned long long id3 = q.add_work(&w3);
+	iterate = true;
+	
+	while(iterate){
+		work_status_t ws = q.get_work_result(id3, true, r);
+		switch(ws){
+			case WORK_READY:
+				iterate = false;
+				break;
+		}
+	}
+	q.end();
 	return 0;
 }
 
