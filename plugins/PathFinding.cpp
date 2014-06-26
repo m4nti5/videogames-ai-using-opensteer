@@ -1725,7 +1725,7 @@ namespace{
         
         if(drawGraph)
         	k.g.draw();
-        status << resetCount << " restarts" << std::endl << "hp: " << hp << std::endl << std::ends;
+        status << resetCount << " restarts" << std::endl << "hp: " << hp << std::endl << "Comportamiento: " << k.seekerStateString << std::ends;
         const float h = drawGetWindowHeight ();
         const Vec3 screenLocation (10, h-50, 0);
         draw2dTextAt2dLocation (status, screenLocation, gGray80, drawGetWindowWidth(), drawGetWindowHeight());
@@ -1849,8 +1849,7 @@ namespace{
 		t.name = "behave";
 		tasks.push_back(t);
 		
-		htn.plan(s, tasks, plan_str, 3);
-		std::cout << "***PLAN: " << plan_str << std::endl;
+		htn.plan(s, tasks, plan_str, 0);
 		
 		if(plan_str.size() == 0){
 			plan.push_back(GoToBaseFlag::getSteering);

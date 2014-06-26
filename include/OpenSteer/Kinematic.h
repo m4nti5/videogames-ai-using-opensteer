@@ -49,7 +49,7 @@
 		
 				static const Kinematic zero;
 		
-				Kinematic(void): maxSpeed(2.0f), maxRotation(M_PI), maxAcceleration(13.0f), maxAngularAcceleration(20.0f), position(), orientation(0.0f), velocity(), rotation (0.0f), seekerStateString("") {}
+				Kinematic(void): maxSpeed(3.0f), maxRotation(M_PI), maxAcceleration(13.0f), maxAngularAcceleration(20.0f), position(), orientation(0.0f), velocity(), rotation (0.0f), seekerStateString("") {}
 		
 				Kinematic(float s, float r, float a, float aa, Vec3 p, float o, Vec3 v, float ro, std::string str): maxSpeed(s), maxRotation(r), maxAcceleration(a), maxAngularAcceleration(aa), position(p), orientation(o), velocity(v), rotation (ro), seekerStateString(str) {}
 		
