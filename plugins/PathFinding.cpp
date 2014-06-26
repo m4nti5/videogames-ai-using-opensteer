@@ -1216,7 +1216,7 @@ namespace{
 		std::vector< Vec3 > vertex;
 		std::vector< tuple<int> > triangles;
 		VantagePoints v;
-		loadMesh(MESH_FILE, vertex, triangles, v);
+		loadMesh(MESH_FILE, vertex, triangles);
 		std::cout << "Cargado los meshes, " << triangles.size() << " poligonos!!!" << std::endl;
 		for(std::vector< tuple<int> >::iterator it = triangles.begin(); it != triangles.end(); ++it){
 			Polygon p(vertex[(*it).first - 1], vertex[(*it).second - 1], vertex[(*it).third - 1]);
