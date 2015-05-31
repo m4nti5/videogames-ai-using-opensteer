@@ -1,0 +1,1 @@
+Using the opensteer library and it's tool it is posible to implement the ai algorithms described in the literature, this project implements several algorithms, it covers from kinetic to steering behaviours.
